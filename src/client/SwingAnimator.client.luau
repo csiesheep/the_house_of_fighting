@@ -55,13 +55,18 @@ local function play(character: Model)
 
 	active[character] = true
 	local started = os.clock()
-	local connection: RBXScriptConnection
 
-	connection = RunService.RenderStepped:Connect(function()
+	-- Bound just after RenderPriority.Character, which is when the
+	-- Animator poses the rig. RenderStepped runs before that, so
+	-- anything written there is overwritten in the same frame and
+	-- never reaches the screen.
+	local step = "Swing_" .. character.Name .. "_" .. tostring(started)
+
+	RunService:BindToRenderStep(step, Enum.RenderPriority.Character.Value + 1, function()
 		local elapsed = os.clock() - started
 
 		if elapsed >= SwingArc.Total or not character.Parent then
-			connection:Disconnect()
+			RunService:UnbindFromRenderStep(step)
 			active[character] = nil
 			if character.Parent then
 				driver.reset()

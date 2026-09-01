@@ -119,13 +119,31 @@ function SwingArc.armJointOf(character: Model): Instance?
 	return joint
 end
 
+local function rotation(degrees: number): CFrame
+	local r = math.rad(degrees)
+	if SWING.Axis == "Y" then
+		return CFrame.Angles(0, r, 0)
+	elseif SWING.Axis == "Z" then
+		return CFrame.Angles(0, 0, r)
+	end
+	return CFrame.Angles(r, 0, 0)
+end
+
+-- The rule for both joint types is the same: write to the joint's
+-- BASE offset, never to the channel the Animator owns.
+--
+-- Motor6D keeps that base in C0 while animations write Transform, so
+-- C0 is safe. AnimationConstraint has no C0 -- its Transform IS the
+-- animated channel, which is why writing there did nothing at all.
+-- Its equivalent base is the attachment the joint hangs off, and
+-- animations never touch that.
 function SwingArc.driverFor(joint: Instance): Driver?
 	if joint:IsA("JointInstance") then
 		local rest = joint.C0
 		return {
 			name = joint.ClassName .. ":" .. joint.Name,
 			apply = function(degrees)
-				joint.C0 = rest * CFrame.Angles(math.rad(degrees), 0, 0)
+				joint.C0 = rest * rotation(degrees)
 			end,
 			reset = function()
 				joint.C0 = rest
@@ -134,11 +152,27 @@ function SwingArc.driverFor(joint: Instance): Driver?
 	end
 
 	if joint:IsA("AnimationConstraint") then
+		local anchor = joint.Attachment0
+		if anchor then
+			local rest = anchor.CFrame
+			return {
+				name = joint.ClassName .. ":" .. joint.Name .. " (via " .. anchor.Name .. ")",
+				apply = function(degrees)
+					anchor.CFrame = rest * rotation(degrees)
+				end,
+				reset = function()
+					anchor.CFrame = rest
+				end,
+			}
+		end
+
+		-- no attachment to lean on; Transform is all there is, and the
+		-- render-step ordering on the client is what makes it stick
 		local rest = joint.Transform
 		return {
-			name = joint.ClassName .. ":" .. joint.Name,
+			name = joint.ClassName .. ":" .. joint.Name .. " (via Transform)",
 			apply = function(degrees)
-				joint.Transform = rest * CFrame.Angles(math.rad(degrees), 0, 0)
+				joint.Transform = rest * rotation(degrees)
 			end,
 			reset = function()
 				joint.Transform = rest

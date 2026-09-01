@@ -84,6 +84,11 @@ ShopConfig.Swing = {
 
 	RaiseAngle = -145,   -- degrees at the shoulder, arm up and back
 	ChopAngle  = 40,     -- follow through past vertical
+
+	-- Which local axis of the shoulder joint the swing rotates around.
+	-- X is a forward chop on the rigs seen so far; if the arm swings
+	-- sideways or twists instead, try "Z" then "Y".
+	Axis = "X",
 }
 
 ShopConfig.Gear = {
