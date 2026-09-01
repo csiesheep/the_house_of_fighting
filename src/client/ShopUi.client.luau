@@ -16,12 +16,14 @@ local ShopConfig = require(ReplicatedStorage:WaitForChild("ShopConfig"))
 
 local player = Players.LocalPlayer
 
-local INK    = Color3.fromRGB(240, 236, 232)
-local MUTED  = Color3.fromRGB(158, 150, 148)
-local PANEL  = Color3.fromRGB(26, 22, 26)
-local ROW    = Color3.fromRGB(40, 34, 40)
-local ACCENT = Color3.fromRGB(214, 84, 74)
-local OWNED  = Color3.fromRGB(84, 168, 106)
+local Theme = require(ReplicatedStorage:WaitForChild("Theme"))
+
+local INK    = Theme.Ink
+local MUTED  = Theme.Muted
+local PANEL  = Theme.Panel
+local ROW    = Theme.Row
+local ACCENT = Theme.Accent
+local OWNED  = Theme.Owned
 
 local gui = Instance.new("ScreenGui")
 gui.Name = "ShopUi"
@@ -73,7 +75,7 @@ subtitle.Parent = panel
 local closeButton = Instance.new("TextButton")
 closeButton.Size = UDim2.new(0, 34, 0, 34)
 closeButton.Position = UDim2.new(1, -48, 0, 16)
-closeButton.BackgroundColor3 = Color3.fromRGB(58, 50, 58)
+closeButton.BackgroundColor3 = Theme.Control
 closeButton.TextColor3 = INK
 closeButton.Font = Enum.Font.GothamBold
 closeButton.TextSize = 18
@@ -101,7 +103,7 @@ shopButton.Name = "ShopButton"
 shopButton.Size = UDim2.new(0, 132, 0, 46)
 shopButton.Position = UDim2.new(1, -150, 1, -64)
 shopButton.BackgroundColor3 = ACCENT
-shopButton.TextColor3 = Color3.fromRGB(24, 14, 12)
+shopButton.TextColor3 = Theme.AccentInk
 shopButton.Font = Enum.Font.GothamBold
 shopButton.TextSize = 18
 shopButton.Text = "SHOP"
@@ -159,7 +161,7 @@ local function addRow(item, infoType: EnumItem, isOwned: (() -> boolean)?, promp
 	buy.Size = UDim2.new(0, 98, 0, 42)
 	buy.Position = UDim2.new(1, -110, 0.5, -21)
 	buy.BackgroundColor3 = ACCENT
-	buy.TextColor3 = Color3.fromRGB(24, 14, 12)
+	buy.TextColor3 = Theme.AccentInk
 	buy.Font = Enum.Font.GothamBold
 	buy.TextSize = 15
 	buy.Text = "..."
@@ -170,8 +172,8 @@ local function addRow(item, infoType: EnumItem, isOwned: (() -> boolean)?, promp
 	-- during development, but make it obviously not buyable.
 	if not (item.id and item.id > 0) then
 		buy.Text = item.robux and ("R$ " .. item.robux) or "soon"
-		buy.BackgroundColor3 = Color3.fromRGB(74, 66, 74)
-		buy.TextColor3 = Color3.fromRGB(150, 142, 150)
+		buy.BackgroundColor3 = Theme.Disabled
+		buy.TextColor3 = Theme.DisabledInk
 		buy.AutoButtonColor = false
 		return
 	end
@@ -180,11 +182,13 @@ local function addRow(item, infoType: EnumItem, isOwned: (() -> boolean)?, promp
 		if isOwned and isOwned() then
 			buy.Text = "OWNED"
 			buy.BackgroundColor3 = OWNED
+			buy.TextColor3 = Theme.ReadyInk
 			buy.AutoButtonColor = false
 			return
 		end
 
 		buy.BackgroundColor3 = ACCENT
+		buy.TextColor3 = Theme.AccentInk
 		buy.AutoButtonColor = true
 
 		-- GetProductInfo yields, so keep it off the construction path

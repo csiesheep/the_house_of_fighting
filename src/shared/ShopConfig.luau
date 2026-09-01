@@ -42,7 +42,7 @@ ShopConfig.GamePasses = {
 	{
 		key = "AdminCommands", id = 0, robux = 1999,
 		name = "Admin Commands",
-		desc = "Chat commands: /nuke, /rebuild, /speed, /jump, /heal, /day, /night.",
+		desc = "Chat commands: /nuke, /rebuild, /speed, /jump, /heal, /reset.",
 	},
 }
 

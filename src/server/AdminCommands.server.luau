@@ -5,6 +5,9 @@
 --  Gated on the Admin attribute, which only Shop.server.luau
 --  ever sets. This script never touches MarketplaceService.
 --
+--  There is deliberately no /night: the place is meant to stay
+--  bright, and a command that darkens it would undo that.
+--
 --  Every command affects the world or the caller. None of them
 --  reach into another player -- a paid item that lets a buyer
 --  freeze or kick strangers stops being a toy and becomes a
@@ -14,7 +17,6 @@
 local Players           = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local ServerStorage     = game:GetService("ServerStorage")
-local Lighting          = game:GetService("Lighting")
 
 local ShopConfig  = require(ReplicatedStorage:WaitForChild("ShopConfig"))
 local HouseConfig = require(ReplicatedStorage:WaitForChild("HouseConfig"))
@@ -97,16 +99,6 @@ commands["reset"] = function(player)
 	humanoid.UseJumpPower = true
 	humanoid.JumpPower = 50
 	tell(player, "speed and jump back to default")
-end
-
-commands["day"] = function(player)
-	Lighting.ClockTime = 14
-	tell(player, "daytime")
-end
-
-commands["night"] = function(player)
-	Lighting.ClockTime = 3
-	tell(player, "night")
 end
 
 -- ===========================================================

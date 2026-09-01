@@ -24,10 +24,26 @@
     "Lighting": {
       "$className": "Lighting",
       "$properties": {
-        "ClockTime": 3.5,
-        "Brightness": 1.5,
+        "Brightness": 2.5,
+        "ExposureCompensation": 0.2,
         "GlobalShadows": true,
-        "FogEnd": 700
+
+        "Ambient": [0.58, 0.58, 0.62],
+        "OutdoorAmbient": [0.78, 0.79, 0.82],
+        "EnvironmentDiffuseScale": 0.85,
+        "EnvironmentSpecularScale": 0.5,
+
+        "FogEnd": 4000
+      },
+
+      "Atmosphere": {
+        "$className": "Atmosphere",
+        "$properties": {
+          "Density": 0.2,
+          "Offset": 0.15,
+          "Haze": 0.8,
+          "Glare": 0.05
+        }
       }
     }
   }

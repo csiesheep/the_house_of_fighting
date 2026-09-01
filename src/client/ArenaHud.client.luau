@@ -6,13 +6,16 @@
 --  is running and the Rojo sync reached StarterPlayerScripts.
 -- ===========================================================
 
-local Players = game:GetService("Players")
+local Players           = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+local Theme = require(ReplicatedStorage:WaitForChild("Theme"))
 
 local player = Players.LocalPlayer
 
-local INK   = Color3.fromRGB(240, 236, 232)
-local MUTED = Color3.fromRGB(160, 152, 150)
-local PANEL = Color3.fromRGB(26, 22, 26)
+local INK   = Theme.Ink
+local MUTED = Theme.Muted
+local PANEL = Theme.Panel
 
 local gui = Instance.new("ScreenGui")
 gui.Name = "HouseHud"
@@ -24,7 +27,7 @@ local card = Instance.new("Frame")
 card.Size = UDim2.new(0, 250, 0, 66)
 card.Position = UDim2.new(0.5, -125, 0, 14)
 card.BackgroundColor3 = PANEL
-card.BackgroundTransparency = 0.2
+card.BackgroundTransparency = Theme.PanelTransparency
 card.Parent = gui
 
 local corner = Instance.new("UICorner")

@@ -19,10 +19,11 @@ local requestSwitch = remotes:WaitForChild("RequestSwitch")
 
 local player = Players.LocalPlayer
 
-local INK    = Color3.fromRGB(240, 236, 232)
-local MUTED  = Color3.fromRGB(150, 142, 148)
-local PANEL  = Color3.fromRGB(26, 22, 26)
-local READY  = Color3.fromRGB(84, 168, 106)
+local Theme = require(ReplicatedStorage:WaitForChild("Theme"))
+
+local MUTED  = Theme.Muted
+local PANEL  = Theme.Panel
+local READY  = Theme.Ready
 
 local gui = Instance.new("ScreenGui")
 gui.Name = "HouseSwitchUi"
@@ -35,7 +36,7 @@ button.Name = "SwitchButton"
 button.Size = UDim2.new(0, 210, 0, 46)
 button.Position = UDim2.new(0.5, -105, 0, 88)
 button.BackgroundColor3 = PANEL
-button.BackgroundTransparency = 0.25
+button.BackgroundTransparency = Theme.PanelTransparency
 button.TextColor3 = MUTED
 button.Font = Enum.Font.GothamBold
 button.TextSize = 15
@@ -71,7 +72,7 @@ local function setReady(ready: boolean)
 		button.Text = "SWITCH HOUSES"
 		button.BackgroundColor3 = READY
 		button.BackgroundTransparency = 0
-		button.TextColor3 = Color3.fromRGB(14, 26, 18)
+		button.TextColor3 = Theme.ReadyInk
 		button.AutoButtonColor = true
 		-- a single pulse, so it is noticed without nagging
 		button.Size = UDim2.new(0, 210, 0, 46)
@@ -81,7 +82,7 @@ local function setReady(ready: boolean)
 		}):Play()
 	else
 		button.BackgroundColor3 = PANEL
-		button.BackgroundTransparency = 0.25
+		button.BackgroundTransparency = Theme.PanelTransparency
 		button.TextColor3 = MUTED
 		button.AutoButtonColor = false
 		button.Size = UDim2.new(0, 210, 0, 46)
