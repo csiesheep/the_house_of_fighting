@@ -13,6 +13,7 @@
 
 local CollectionService = game:GetService("CollectionService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local ServerStorage     = game:GetService("ServerStorage")
 
 local HouseConfig = require(ReplicatedStorage:WaitForChild("HouseConfig"))
 local HOUSE = HouseConfig.House
@@ -140,7 +141,27 @@ local function buildHouse()
 		:format(#folder:GetChildren(), width, depth, HOUSE.HeightBricks))
 end
 
+local function rebuildNow()
+	if houseFolder then
+		houseFolder:Destroy()
+		houseFolder = nil
+	end
+	buildHouse()
+end
+
 buildHouse()
+
+-- ===========================================================
+--  Rebuild on demand
+--
+--  Exposed as a signal rather than a function so anything on the
+--  server can ask for a fresh house without requiring this script.
+-- ===========================================================
+
+local rebuildSignal = Instance.new("BindableEvent")
+rebuildSignal.Name = "RebuildHouse"
+rebuildSignal.Parent = ServerStorage
+rebuildSignal.Event:Connect(rebuildNow)
 
 -- ===========================================================
 --  Rebuild once the place has been flattened
@@ -163,10 +184,6 @@ task.spawn(function()
 
 		print(("House flattened. Rebuilding in %ds."):format(HOUSE.RebuildDelay))
 		task.wait(HOUSE.RebuildDelay)
-
-		if houseFolder then
-			houseFolder:Destroy()
-		end
-		buildHouse()
+		rebuildNow()
 	end
 end)

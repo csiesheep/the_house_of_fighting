@@ -4,6 +4,10 @@
 --
 --  Gives every player a hammer and turns swings into damage.
 --
+--  Which hammer you get is read from the HammerTier attribute,
+--  set by Shop.server.luau. This script never asks who owns
+--  what -- it just rebuilds the tool when the tier changes.
+--
 --  Hit detection is a server raycast from the character's eye
 --  line, not Handle.Touched. Touched fires on brushing past a
 --  wall, which would let you demolish the house by walking
@@ -13,90 +17,37 @@
 local Players           = game:GetService("Players")
 local CollectionService = game:GetService("CollectionService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local Debris            = game:GetService("Debris")
 
 local HouseConfig = require(ReplicatedStorage:WaitForChild("HouseConfig"))
-local HAMMER = HouseConfig.Hammer
-local TAG    = HouseConfig.BreakableTag
+local ShopConfig  = require(ReplicatedStorage:WaitForChild("ShopConfig"))
+local Breaking    = require(ReplicatedStorage:WaitForChild("Breaking"))
 
--- ===========================================================
---  Breaking a brick
--- ===========================================================
+local TAG = HouseConfig.BreakableTag
+local HANDLE_SIZE = HouseConfig.Hammer.HandleSize
 
--- Anything resting on the brick that just died gets unanchored, so
--- the wall above sags and drops instead of floating there.
-local function collapseAbove(brick: BasePart)
-	if not HouseConfig.House.CollapseAbove then
-		return
-	end
-
-	local size = brick.Size
-	local origin = brick.Position + Vector3.new(0, size.Y, 0)
-	local region = Vector3.new(size.X * 0.9, size.Y * 1.2, size.Z * 0.9)
-
-	local params = OverlapParams.new()
-	params.FilterType = Enum.RaycastFilterType.Include
-	params.FilterDescendantsInstances = CollectionService:GetTagged(TAG)
-
-	for _, part in ipairs(workspace:GetPartBoundsInBox(CFrame.new(origin), region, params)) do
-		if part ~= brick and part:IsA("BasePart") and part.Anchored then
-			part.Anchored = false
-		end
-	end
-end
-
-local function shatter(brick: BasePart, fromPosition: Vector3)
-	CollectionService:RemoveTag(brick, TAG)
-
-	brick.Anchored = false
-	brick.CanCollide = true
-
-	local push = brick.Position - fromPosition
-	if push.Magnitude < 0.1 then
-		push = Vector3.yAxis
-	end
-	local mass = brick:GetMass()
-	brick:ApplyImpulse(push.Unit * mass * HAMMER.Knockback + Vector3.new(0, mass * 12, 0))
-	brick:ApplyAngularImpulse(Vector3.new(
-		math.random(-1, 1), math.random(-1, 1), math.random(-1, 1)
-	) * mass * 6)
-
-	Debris:AddItem(brick, HAMMER.DebrisLife)
-end
-
-local function damage(brick: BasePart, amount: number, fromPosition: Vector3)
-	local health = (brick:GetAttribute("Health") :: number?) or 0
-	local maxHealth = (brick:GetAttribute("MaxHealth") :: number?) or 1
-
-	health -= amount
-
-	if health > 0 then
-		brick:SetAttribute("Health", health)
-		-- visible damage: the brick lightens and cracks open as it weakens
-		local wear = 1 - health / maxHealth
-		brick.Transparency = 0.3 * wear
-		brick.Color = brick.Color:Lerp(Color3.fromRGB(90, 78, 72), 0.35 * wear)
-		return
-	end
-
-	collapseAbove(brick)
-	shatter(brick, fromPosition)
+local function tierOf(player: Player)
+	local tier = (player:GetAttribute("HammerTier") :: number?) or 1
+	return ShopConfig.HammerTiers[tier] or ShopConfig.HammerTiers[1]
 end
 
 -- ===========================================================
 --  The tool
 -- ===========================================================
 
-local function buildHammer(): Tool
+local restGrip = CFrame.new(0, -HANDLE_SIZE.Y / 2 + 0.6, 0) * CFrame.Angles(math.rad(90), 0, 0)
+local swingGrip = restGrip * CFrame.Angles(0, 0, math.rad(-75))
+
+local function buildHammer(spec): Tool
 	local tool = Instance.new("Tool")
-	tool.Name = "Hammer"
+	tool.Name = spec.name
 	tool.RequiresHandle = true
 	tool.CanBeDropped = false
 	tool.ToolTip = "Swing at the house"
+	tool.Grip = restGrip
 
 	local handle = Instance.new("Part")
 	handle.Name = "Handle"
-	handle.Size = HAMMER.HandleSize
+	handle.Size = HANDLE_SIZE
 	handle.Color = HouseConfig.Palette.Handle
 	handle.Material = Enum.Material.Wood
 	handle.CanCollide = false
@@ -104,12 +55,12 @@ local function buildHammer(): Tool
 
 	local head = Instance.new("Part")
 	head.Name = "Head"
-	head.Size = HAMMER.HeadSize
-	head.Color = HouseConfig.Palette.Head
+	head.Size = spec.headSize
+	head.Color = spec.headColor
 	head.Material = Enum.Material.Metal
 	head.CanCollide = false
 	head.Massless = true
-	head.CFrame = handle.CFrame * CFrame.new(0, HAMMER.HandleSize.Y / 2, 0)
+	head.CFrame = handle.CFrame * CFrame.new(0, HANDLE_SIZE.Y / 2, 0)
 	head.Parent = tool
 
 	local weld = Instance.new("WeldConstraint")
@@ -117,21 +68,20 @@ local function buildHammer(): Tool
 	weld.Part1 = head
 	weld.Parent = handle
 
-	-- tilt it so the head sits above the fist rather than through it
-	tool.Grip = CFrame.new(0, -HAMMER.HandleSize.Y / 2 + 0.6, 0)
-		* CFrame.Angles(math.rad(90), 0, 0)
-
 	return tool
 end
 
-local restGrip = CFrame.new(0, -HAMMER.HandleSize.Y / 2 + 0.6, 0) * CFrame.Angles(math.rad(90), 0, 0)
-local swingGrip = restGrip * CFrame.Angles(0, 0, math.rad(-75))
+-- ===========================================================
+--  Swinging
+-- ===========================================================
 
 local lastSwing: { [Player]: number } = {}
 
 local function onActivated(player: Player, tool: Tool)
+	local spec = tierOf(player)
+
 	local now = os.clock()
-	if lastSwing[player] and now - lastSwing[player] < HAMMER.Cooldown then
+	if lastSwing[player] and now - lastSwing[player] < spec.cooldown then
 		return
 	end
 	lastSwing[player] = now
@@ -155,16 +105,20 @@ local function onActivated(player: Player, tool: Tool)
 	params.FilterDescendantsInstances = { character }
 
 	local origin = root.Position + Vector3.new(0, 1.2, 0)
-	local result = workspace:Raycast(origin, root.CFrame.LookVector * HAMMER.Reach, params)
+	local result = workspace:Raycast(origin, root.CFrame.LookVector * spec.reach, params)
 	if not result then
 		return
 	end
 
 	local hit = result.Instance
 	if hit and hit:IsA("BasePart") and CollectionService:HasTag(hit, TAG) then
-		damage(hit, HAMMER.Damage, origin)
+		Breaking.damage(hit, spec.damage, origin, spec.knockback)
 	end
 end
+
+-- ===========================================================
+--  Handing it out
+-- ===========================================================
 
 local function giveHammer(player: Player)
 	local backpack = player:FindFirstChildOfClass("Backpack")
@@ -172,13 +126,20 @@ local function giveHammer(player: Player)
 		return
 	end
 
-	for _, existing in ipairs(backpack:GetChildren()) do
-		if existing.Name == "Hammer" then
-			existing:Destroy()
+	local spec = tierOf(player)
+
+	-- clear any hammer they are holding or carrying, at any tier
+	for _, container in ipairs({ backpack, player.Character }) do
+		if container then
+			for _, existing in ipairs(container:GetChildren()) do
+				if existing:IsA("Tool") then
+					existing:Destroy()
+				end
+			end
 		end
 	end
 
-	local tool = buildHammer()
+	local tool = buildHammer(spec)
 	tool.Activated:Connect(function()
 		onActivated(player, tool)
 	end)
@@ -190,10 +151,17 @@ Players.PlayerAdded:Connect(function(player)
 		task.wait(0.2)   -- Backpack is emptied on respawn; wait it out
 		giveHammer(player)
 	end)
+
+	-- buying the Sledgehammer mid-round swaps the tool in place
+	player:GetAttributeChangedSignal("HammerTier"):Connect(function()
+		if player.Character then
+			giveHammer(player)
+		end
+	end)
 end)
 
 Players.PlayerRemoving:Connect(function(player)
 	lastSwing[player] = nil
 end)
 
-print("Hammer ready: reach " .. HAMMER.Reach .. " studs, " .. HAMMER.Damage .. " damage per swing")
+print("Hammer ready: tier 1 and 2 configured")

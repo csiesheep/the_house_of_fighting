@@ -28,14 +28,10 @@ HouseConfig.House = {
 }
 
 HouseConfig.Hammer = {
-	Reach      = 12,    -- studs
-	Damage     = 1,
-	Cooldown   = 0.45,  -- seconds between swings
-	Knockback  = 34,    -- how hard shattered bricks fly
+	-- Reach, damage, cooldown, knockback and head size are per tier and
+	-- live in ShopConfig.HammerTiers -- edit them there, not here.
 	DebrisLife = 6,     -- seconds before broken bricks are cleaned up
-
 	HandleSize = Vector3.new(0.5, 4, 0.5),
-	HeadSize   = Vector3.new(1.5, 1.5, 2.8),
 }
 
 HouseConfig.Palette = {
