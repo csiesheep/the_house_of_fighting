@@ -1,0 +1,16 @@
+# Roblox place and model files are build artifacts, not source.
+# `rojo build` regenerates them from src/ + default.project.json.
+*.rbxl
+*.rbxlx
+*.rbxm
+*.rbxmx
+*.rbxl.lock
+*.rbxlx.lock
+
+build/
+
+# Editor / OS
+.vscode/
+.idea/
+Thumbs.db
+.DS_Store
