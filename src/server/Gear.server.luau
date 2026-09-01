@@ -127,7 +127,7 @@ local function dropFusionCoil(player: Player)
 		end
 
 		local centre = coil.Position
-		local destroyed = Breaking.explode(centre, spec.radius, spec.knockback)
+		local destroyed = Breaking.explode(centre, spec.radius, spec.knockback, player)
 
 		local flash = Instance.new("Explosion")
 		flash.Position = centre

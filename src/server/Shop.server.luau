@@ -94,7 +94,7 @@ for _, product in ipairs(ShopConfig.Products) do
 			end
 
 			local charge = ShopConfig.DemolitionCharge
-			local destroyed = Breaking.explode(root.Position, charge.Radius, charge.Knockback)
+			local destroyed = Breaking.explode(root.Position, charge.Radius, charge.Knockback, player)
 			print(("%s set off a charge: %d bricks"):format(player.Name, destroyed))
 			return true
 		end

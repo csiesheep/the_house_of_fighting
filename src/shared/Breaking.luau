@@ -16,6 +16,12 @@ local TAG = HouseConfig.BreakableTag
 
 local Breaking = {}
 
+-- Fired whenever a brick is destroyed, with whoever caused it (or nil
+-- for anything uncredited, like an admin /nuke). Scoring listens to
+-- this, so Breaking never has to know leaderstats exist.
+local destroyedEvent = Instance.new("BindableEvent")
+Breaking.Destroyed = destroyedEvent.Event
+
 -- Anything resting on the brick that just died gets unanchored, so
 -- the wall above sags and drops instead of floating there.
 local function collapseAbove(brick: BasePart)
@@ -38,7 +44,7 @@ local function collapseAbove(brick: BasePart)
 	end
 end
 
-function Breaking.shatter(brick: BasePart, fromPosition: Vector3, knockback: number)
+function Breaking.shatter(brick: BasePart, fromPosition: Vector3, knockback: number, credit: Player?)
 	if not CollectionService:HasTag(brick, TAG) then
 		return
 	end
@@ -61,9 +67,10 @@ function Breaking.shatter(brick: BasePart, fromPosition: Vector3, knockback: num
 	) * mass * 6)
 
 	Debris:AddItem(brick, HouseConfig.Hammer.DebrisLife)
+	destroyedEvent:Fire(credit, brick)
 end
 
-function Breaking.damage(brick: BasePart, amount: number, fromPosition: Vector3, knockback: number)
+function Breaking.damage(brick: BasePart, amount: number, fromPosition: Vector3, knockback: number, credit: Player?)
 	local health = (brick:GetAttribute("Health") :: number?) or 0
 	local maxHealth = (brick:GetAttribute("MaxHealth") :: number?) or 1
 
@@ -78,12 +85,12 @@ function Breaking.damage(brick: BasePart, amount: number, fromPosition: Vector3,
 		return false
 	end
 
-	Breaking.shatter(brick, fromPosition, knockback)
+	Breaking.shatter(brick, fromPosition, knockback, credit)
 	return true
 end
 
 -- Blow a spherical hole in whatever is standing.
-function Breaking.explode(centre: Vector3, radius: number, knockback: number): number
+function Breaking.explode(centre: Vector3, radius: number, knockback: number, credit: Player?): number
 	local params = OverlapParams.new()
 	params.FilterType = Enum.RaycastFilterType.Include
 	params.FilterDescendantsInstances = CollectionService:GetTagged(TAG)
@@ -91,17 +98,17 @@ function Breaking.explode(centre: Vector3, radius: number, knockback: number): n
 	local hit = workspace:GetPartBoundsInRadius(centre, radius, params)
 	for _, part in ipairs(hit) do
 		if part:IsA("BasePart") then
-			Breaking.shatter(part, centre, knockback)
+			Breaking.shatter(part, centre, knockback, credit)
 		end
 	end
 	return #hit
 end
 
-function Breaking.flatten(fromPosition: Vector3, knockback: number): number
+function Breaking.flatten(fromPosition: Vector3, knockback: number, credit: Player?): number
 	local bricks = CollectionService:GetTagged(TAG)
 	for _, part in ipairs(bricks) do
 		if part:IsA("BasePart") then
-			Breaking.shatter(part, fromPosition, knockback)
+			Breaking.shatter(part, fromPosition, knockback, credit)
 		end
 	end
 	return #bricks

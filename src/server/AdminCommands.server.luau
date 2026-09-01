@@ -54,8 +54,10 @@ end
 commands["nuke"] = function(player)
 	local root = rootOf(player)
 	local from = root and root.Position or HouseConfig.House.Origin
-	local count = Breaking.flatten(from, 120)
-	tell(player, ("flattened %d bricks"):format(count))
+	-- deliberately uncredited: /nuke is a free win, and letting it
+	-- score would put whoever bought admin at the top of the board
+	local count = Breaking.flatten(from, 120, nil)
+	tell(player, ("flattened %d bricks (not scored)"):format(count))
 end
 
 commands["rebuild"] = function(player)

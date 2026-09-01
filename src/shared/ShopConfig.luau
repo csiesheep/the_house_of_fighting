@@ -69,6 +69,19 @@ ShopConfig.HammerTiers = {
 	},
 }
 
+-- The swing animation, driven straight onto the shoulder joint.
+-- The hit lands at the end of ChopTime, so raising these slows the
+-- weapon down in a way you can see and react to.
+ShopConfig.Swing = {
+	RaiseTime  = 0.14,   -- rearing back
+	ChopTime   = 0.10,   -- coming down; impact at the end of this
+	HoldTime   = 0.06,   -- pause on impact, so the hit reads
+	ReturnTime = 0.18,   -- back to rest
+
+	RaiseAngle = -145,   -- degrees at the shoulder, arm up and back
+	ChopAngle  = 40,     -- follow through past vertical
+}
+
 ShopConfig.Gear = {
 	SpeedCoil = {
 		toolName = "Speed Coil",

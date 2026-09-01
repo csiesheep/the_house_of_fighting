@@ -163,8 +163,9 @@ task.spawn(function()
 			local root = character and character:FindFirstChild("HumanoidRootPart")
 			if root and root:IsA("BasePart") and root.Position.Y < floorY then
 				local stats = player:FindFirstChild("leaderstats")
-				if stats and stats:FindFirstChild("Falls") then
-					stats.Falls.Value += 1
+				local falls = stats and stats:FindFirstChild("Falls")
+				if falls and falls:IsA("IntValue") then
+					falls.Value += 1
 				end
 				local pad = spawnPads[rng:NextInteger(1, #spawnPads)]
 				character:PivotTo(CFrame.new(pad.Position + Vector3.new(0, 4, 0)))
@@ -173,12 +174,6 @@ task.spawn(function()
 	end
 end)
 
-Players.PlayerAdded:Connect(function(player)
-	local stats = Instance.new("Folder")
-	stats.Name = "leaderstats"
-	stats.Parent = player
-
-	local falls = Instance.new("IntValue")
-	falls.Name = "Falls"
-	falls.Parent = stats
-end)
+-- leaderstats is created by Score.server.luau, which owns it. Two
+-- scripts creating a folder of the same name can produce two folders
+-- and a player list that shows neither.
