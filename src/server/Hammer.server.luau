@@ -79,33 +79,56 @@ end
 --  arm -- rig names have moved before and will again.
 -- ===========================================================
 
-local function shoulderOf(character: Model): Motor6D?
-	local upper = character:FindFirstChild("RightUpperArm")
-	if upper then
-		local motor = upper:FindFirstChild("RightShoulder")
-		if motor and motor:IsA("Motor6D") then
-			return motor
-		end
+-- the joint that moves this part
+local function motorDriving(character: Model, part: BasePart?): Motor6D?
+	if not part then
+		return nil
 	end
-
-	local torso = character:FindFirstChild("Torso")
-	if torso then
-		local motor = torso:FindFirstChild("Right Shoulder")
-		if motor and motor:IsA("Motor6D") then
-			return motor
-		end
-	end
-
 	for _, descendant in ipairs(character:GetDescendants()) do
-		if descendant:IsA("Motor6D") then
-			local name = descendant.Name
-			if name == "RightShoulder" or name == "Right Shoulder" then
-				return descendant
-			end
+		if descendant:IsA("Motor6D") and descendant.Part1 == part then
+			return descendant
 		end
 	end
-
 	return nil
+end
+
+-- the hand the tool is actually welded into
+local function gripHandOf(character: Model): BasePart?
+	local grip = character:FindFirstChild("RightGrip", true)
+	if grip and grip:IsA("Weld") and grip.Part0 then
+		return grip.Part0
+	end
+
+	local named = character:FindFirstChild("RightHand") or character:FindFirstChild("Right Arm")
+	return (named and named:IsA("BasePart")) and named or nil
+end
+
+-- Walk up the skeleton from the hand until the joint we are holding
+-- hangs off the torso. That last joint is the shoulder, whatever the
+-- rig chose to call it -- which matters, because searching by name
+-- found nothing on a stock R15 character.
+local function shoulderOf(character: Model): Motor6D?
+	local motor = motorDriving(character, gripHandOf(character))
+	if not motor then
+		return nil
+	end
+
+	for _ = 1, 4 do
+		local parent = motor.Part0
+		if not parent then
+			break
+		end
+		if string.find(string.lower(parent.Name), "torso") then
+			break        -- gone as far as the arm goes
+		end
+		local up = motorDriving(character, parent)
+		if not up then
+			break
+		end
+		motor = up
+	end
+
+	return motor
 end
 
 -- Always return to the pose the joint had before we touched it.
@@ -136,11 +159,29 @@ local function report(player: Player, character: Model, motor: Motor6D?)
 	local rig = humanoid and humanoid.RigType.Name or "unknown"
 
 	if motor then
-		print(("Hammer: %s is %s, swinging %s"):format(player.Name, rig, motor:GetFullName()))
-	else
-		warn(("Hammer: %s is %s and has no right shoulder Motor6D. "):format(player.Name, rig)
-			.. "Falling back to swinging the tool only.")
+		print(("Hammer: %s is %s, swinging %s (Part0=%s)")
+			:format(player.Name, rig, motor.Name, motor.Part0 and motor.Part0.Name or "?"))
+		return
 	end
+
+	-- If this ever fires again, do not make anyone guess a second time:
+	-- print the skeleton we actually got.
+	warn(("Hammer: %s is %s and no arm joint was found. Falling back to the tool only.")
+		:format(player.Name, rig))
+
+	local hand = gripHandOf(character)
+	warn("  grip hand: " .. (hand and hand.Name or "none"))
+
+	local joints = {}
+	for _, descendant in ipairs(character:GetDescendants()) do
+		if descendant:IsA("Motor6D") then
+			table.insert(joints, ("%s[%s->%s]"):format(
+				descendant.Name,
+				descendant.Part0 and descendant.Part0.Name or "?",
+				descendant.Part1 and descendant.Part1.Name or "?"))
+		end
+	end
+	warn("  Motor6Ds (" .. #joints .. "): " .. (table.concat(joints, ", ") :: string))
 end
 
 -- ===========================================================
@@ -186,8 +227,11 @@ local function playSwing(player: Player, character: Model, tool: Tool)
 
 	local rest = motor and poseOf(motor) or nil
 
-	-- with no joint to drive, the tool has to carry the whole motion
-	local gripFactor = motor and 0.4 or 1.0
+	-- When the arm swings, leave the grip alone: rotating the hammer as
+	-- well as the arm was the "spinning in the hand" you saw. With no
+	-- joint, tilt the tool a little rather than whipping it through
+	-- 185 degrees, which read as a spin rather than a chop.
+	local gripFactor = motor and 0 or 0.3
 
 	local started = os.clock()
 	local connection: RBXScriptConnection
@@ -201,8 +245,8 @@ local function playSwing(player: Player, character: Model, tool: Tool)
 			motor.C0 = rest * CFrame.Angles(math.rad(degrees), 0, 0)
 		end
 
-		if tool.Parent then
-			tool.Grip = restGrip * CFrame.Angles(0, 0, math.rad(degrees * gripFactor))
+		if tool.Parent and gripFactor > 0 then
+			tool.Grip = restGrip * CFrame.Angles(math.rad(degrees * gripFactor), 0, 0)
 		end
 
 		if finished then
