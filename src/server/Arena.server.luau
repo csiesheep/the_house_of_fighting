@@ -1,11 +1,12 @@
 --!strict
 -- ===========================================================
---  THE HOUSE OF FIGHTING -- server
+--  THE HOUSE OF FIGHTING -- the ground and the boundary
 --
---  PLACEHOLDER STAGE. This builds a tiled circular arena with
---  spawn points and ring-out recovery, so the project is
---  playable end to end while the real design is decided.
---  Expect to throw most of this away.
+--  A solid base slab, a decorative tiled disc on top of it,
+--  spawn pads, and a wall around the whole thing.
+--
+--  The wall is not tagged Breakable. It is the one structure
+--  in the place the hammer cannot touch.
 -- ===========================================================
 
 local Players           = game:GetService("Players")
@@ -13,10 +14,8 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local StageConfig = require(ReplicatedStorage:WaitForChild("StageConfig"))
 local ARENA = StageConfig.Arena
-
--- ===========================================================
---  1. Build the arena
--- ===========================================================
+local BASE  = StageConfig.Base
+local BOUND = StageConfig.Boundary
 
 local stage = Instance.new("Folder")
 stage.Name = "Stage"
@@ -24,14 +23,34 @@ stage.Name = "Stage"
 local spawnPads: { SpawnLocation } = {}
 local tileCount = 0
 
-local function buildFloor()
+-- ===========================================================
+--  Floor
+-- ===========================================================
+
+-- One solid disc under everything. The tiles above are a jagged
+-- circle; this is what stops you falling between them.
+local function buildBase()
+	local slab = Instance.new("Part")
+	slab.Name = "Base"
+	slab.Anchored = true
+	slab.Shape = Enum.PartType.Cylinder
+	slab.Size = Vector3.new(BASE.Depth, BASE.Radius * 2, BASE.Radius * 2)
+	-- a cylinder's flat faces point along X, so stand it on end
+	slab.CFrame = CFrame.new(ARENA.Origin - Vector3.new(0, BASE.Inset + BASE.Depth / 2, 0))
+		* CFrame.Angles(0, 0, math.rad(90))
+	slab.Color = StageConfig.Palette.Base
+	slab.Material = Enum.Material.Slate
+	slab.TopSurface = Enum.SurfaceType.Smooth
+	slab.Parent = stage
+end
+
+local function buildTiles()
 	local size = ARENA.TileSize
 	local reach = math.ceil(ARENA.Radius / size)
 
 	for gx = -reach, reach do
 		for gz = -reach, reach do
-			local cx = gx * size
-			local cz = gz * size
+			local cx, cz = gx * size, gz * size
 			local distance = math.sqrt(cx * cx + cz * cz)
 			if distance > ARENA.Radius then
 				continue
@@ -46,8 +65,6 @@ local function buildFloor()
 			tile.BottomSurface = Enum.SurfaceType.Smooth
 			tile.Material = Enum.Material.Slate
 
-			-- a red band on the outermost ring, so the edge reads clearly
-			-- from the middle of a fight
 			if distance > ARENA.Radius - size then
 				tile.Color = StageConfig.Palette.Edge
 			elseif (gx + gz) % 2 == 0 then
@@ -61,6 +78,41 @@ local function buildFloor()
 		end
 	end
 end
+
+-- ===========================================================
+--  Boundary wall
+-- ===========================================================
+
+local function buildBoundary()
+	local segments = BOUND.Segments
+	local segmentWidth = 2 * math.pi * BOUND.Radius / segments + 1
+
+	for i = 1, segments do
+		local angle = (i - 1) / segments * math.pi * 2
+
+		local panel = Instance.new("Part")
+		panel.Name = "Boundary"
+		panel.Anchored = true
+		panel.CanCollide = true
+		panel.Size = Vector3.new(segmentWidth, BOUND.Height, BOUND.Thickness)
+		panel.CFrame = CFrame.new(ARENA.Origin + Vector3.new(
+			math.cos(angle) * BOUND.Radius,
+			BOUND.Height / 2,
+			math.sin(angle) * BOUND.Radius
+		)) * CFrame.Angles(0, -angle, 0)
+		panel.Color = StageConfig.Palette.Boundary
+		panel.Material = Enum.Material.Glass
+		panel.Transparency = BOUND.Transparency
+		panel.Reflectance = 0.1
+		panel.TopSurface = Enum.SurfaceType.Smooth
+		panel.BottomSurface = Enum.SurfaceType.Smooth
+		panel.Parent = stage
+	end
+end
+
+-- ===========================================================
+--  Spawns
+-- ===========================================================
 
 local function buildSpawns()
 	for i = 1, ARENA.SpawnCount do
@@ -84,55 +136,21 @@ local function buildSpawns()
 	end
 end
 
-local function buildWalls()
-	if ARENA.WallHeight <= 0 then
-		return
-	end
-
-	-- a ring of thin panels approximating a circle
-	local segments = 48
-	for i = 1, segments do
-		local angle = (i - 1) / segments * math.pi * 2
-		local panel = Instance.new("Part")
-		panel.Name = "Wall"
-		panel.Anchored = true
-		panel.Size = Vector3.new(2 * math.pi * ARENA.Radius / segments + 1, ARENA.WallHeight, 1)
-		panel.CFrame = CFrame.new(
-			ARENA.Origin + Vector3.new(
-				math.cos(angle) * ARENA.Radius,
-				ARENA.WallHeight / 2,
-				math.sin(angle) * ARENA.Radius
-			)
-		) * CFrame.Angles(0, -angle, 0)
-		panel.Color = StageConfig.Palette.TileA
-		panel.Material = Enum.Material.Concrete
-		panel.Parent = stage
-	end
-end
-
-buildFloor()
+buildBase()
+buildTiles()
+buildBoundary()
 buildSpawns()
-buildWalls()
 
-stage.Parent = workspace   -- parent once, at the end: far faster than per-part
+stage.Parent = workspace   -- parent once, at the end
 
-print(("House of Fighting: %d floor tiles, %d spawns, radius %d studs")
-	:format(tileCount, #spawnPads, ARENA.Radius))
+print(("Arena: %d tiles, %d spawns, floor radius %d, wall radius %d x %d high")
+	:format(tileCount, #spawnPads, ARENA.Radius, BOUND.Radius, BOUND.Height))
 
 -- ===========================================================
---  2. Ring-out recovery
---
---  Falling off should cost you the exchange, not thirty seconds
---  of respawn animation. Anyone below the floor gets put back on
---  a spawn pad immediately.
+--  Fall recovery
 -- ===========================================================
 
 local rng = Random.new()
-
-local function returnToPad(character: Model)
-	local pad = spawnPads[rng:NextInteger(1, #spawnPads)]
-	character:PivotTo(CFrame.new(pad.Position + Vector3.new(0, 4, 0)))
-end
 
 task.spawn(function()
 	local floorY = ARENA.Origin.Y - StageConfig.Respawn.FallGrace
@@ -148,15 +166,12 @@ task.spawn(function()
 				if stats and stats:FindFirstChild("Falls") then
 					stats.Falls.Value += 1
 				end
-				returnToPad(character :: Model)
+				local pad = spawnPads[rng:NextInteger(1, #spawnPads)]
+				character:PivotTo(CFrame.new(pad.Position + Vector3.new(0, 4, 0)))
 			end
 		end
 	end
 end)
-
--- ===========================================================
---  3. Joining
--- ===========================================================
 
 Players.PlayerAdded:Connect(function(player)
 	local stats = Instance.new("Folder")

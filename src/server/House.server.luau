@@ -1,171 +1,146 @@
 --!strict
 -- ===========================================================
---  THE HOUSE OF FIGHTING -- the house
+--  THE HOUSE OF FIGHTING -- the neighbourhood
 --
---  Builds a brick house out of individually breakable parts and
---  rebuilds it once the last brick is gone.
---
---  The house does not know the hammer exists. Every brick is
---  tagged Breakable with a Health attribute, and anything that
---  wants to damage one goes through that tag. Add a second
---  weapon later and nothing here changes.
+--  Places several houses around the arena, rebuilds them once
+--  they have all been flattened, and runs the switch timer
+--  that lets players call in a new set.
 -- ===========================================================
 
 local CollectionService = game:GetService("CollectionService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local ServerStorage     = game:GetService("ServerStorage")
 
-local HouseConfig = require(ReplicatedStorage:WaitForChild("HouseConfig"))
+local HouseConfig  = require(ReplicatedStorage:WaitForChild("HouseConfig"))
+local StageConfig  = require(ReplicatedStorage:WaitForChild("StageConfig"))
+local HouseStyles  = require(script.Parent.HouseStyles)
+local HouseBuilder = require(script.Parent.HouseBuilder)
+
 local HOUSE = HouseConfig.House
 local TAG   = HouseConfig.BreakableTag
 
-local brick = HOUSE.BrickSize
-local width = HOUSE.WidthBricks * brick.X
-local depth = HOUSE.DepthBricks * brick.X
-
-local houseFolder: Folder? = nil
-
 -- ===========================================================
---  Building
+--  Remotes
 -- ===========================================================
 
-local function makeBrick(size: Vector3, position: Vector3, color: Color3, material: Enum.Material, parent: Instance)
-	local part = Instance.new("Part")
-	part.Name = "Brick"
-	part.Anchored = true
-	part.Size = size
-	part.Position = position
-	part.Color = color
-	part.Material = material
-	part.TopSurface = Enum.SurfaceType.Smooth
-	part.BottomSurface = Enum.SurfaceType.Smooth
-	part:SetAttribute("Health", HOUSE.BrickHealth)
-	part:SetAttribute("MaxHealth", HOUSE.BrickHealth)
-	part.Parent = parent
-	CollectionService:AddTag(part, TAG)
-	return part
+local remotes = Instance.new("Folder")
+remotes.Name = "HouseRemotes"
+
+-- server -> client: readyAt is a workspace:GetServerTimeNow() stamp, so
+-- the client can run its own countdown without per-second chatter
+local switchState = Instance.new("RemoteEvent")
+switchState.Name = "SwitchState"
+switchState.Parent = remotes
+
+local requestSwitch = Instance.new("RemoteEvent")
+requestSwitch.Name = "RequestSwitch"
+requestSwitch.Parent = remotes
+
+remotes.Parent = ReplicatedStorage
+
+-- ===========================================================
+--  Building the neighbourhood
+-- ===========================================================
+
+local neighbourhood: Folder? = nil
+local rng = Random.new()
+local switchReadyAt = 0
+local currentNames = {}
+
+local function plotPositions(): { Vector3 }
+	local positions = {}
+	local count = HOUSE.HouseCount
+	local origin = StageConfig.Arena.Origin
+
+	if count == 1 then
+		return { origin }
+	end
+
+	for i = 1, count do
+		local angle = (i - 1) / count * math.pi * 2
+		table.insert(positions, origin + Vector3.new(
+			math.cos(angle) * HOUSE.PlotRadius,
+			0,
+			math.sin(angle) * HOUSE.PlotRadius
+		))
+	end
+	return positions
 end
 
-local function brickColor(row: number, col: number): Color3
-	-- offset courses, so the brickwork reads as bonded rather than a grid
-	return ((row + col) % 2 == 0) and HouseConfig.Palette.Brick or HouseConfig.Palette.BrickAlt
-end
-
-local function buildHouse()
+local function buildNeighbourhood()
 	local folder = Instance.new("Folder")
-	folder.Name = "House"
+	folder.Name = "Neighbourhood"
 
-	local baseY = HOUSE.Origin.Y
-	local doorStart = math.floor((HOUSE.WidthBricks - HOUSE.DoorWidth) / 2) + 1
-	local doorEnd = doorStart + HOUSE.DoorWidth - 1
+	currentNames = {}
+	local positions = plotPositions()
 
-	local windowRow: { [number]: boolean } = {}
-	for _, row in ipairs(HOUSE.WindowRows) do
-		windowRow[row] = true
+	-- draw styles without repeating until the list runs out, so a
+	-- switch actually looks different rather than rolling the same
+	-- house three times
+	local pool = table.clone(HouseStyles)
+	for i = #pool, 2, -1 do
+		local j = rng:NextInteger(1, i)
+		pool[i], pool[j] = pool[j], pool[i]
 	end
 
-	-- front and back walls run along X
-	for _, side in ipairs({ -1, 1 }) do
-		local z = HOUSE.Origin.Z + side * depth / 2
-
-		for row = 1, HOUSE.HeightBricks do
-			for col = 1, HOUSE.WidthBricks do
-				-- the doorway is only cut into the front wall
-				local isDoor = side == -1
-					and row <= HOUSE.DoorHeight
-					and col >= doorStart
-					and col <= doorEnd
-				if isDoor then
-					continue
-				end
-
-				local x = HOUSE.Origin.X - width / 2 + (col - 0.5) * brick.X
-				local y = baseY + (row - 0.5) * brick.Y
-				makeBrick(
-					Vector3.new(brick.X, brick.Y, brick.Z),
-					Vector3.new(x, y, z),
-					brickColor(row, col),
-					Enum.Material.Brick,
-					folder
-				)
-			end
-		end
-	end
-
-	-- side walls run along Z, so the brick is turned end on
-	for _, side in ipairs({ -1, 1 }) do
-		local x = HOUSE.Origin.X + side * width / 2
-
-		for row = 1, HOUSE.HeightBricks do
-			for col = 1, HOUSE.DepthBricks do
-				local isWindow = windowRow[row] and (col == 2 or col == HOUSE.DepthBricks - 1)
-				if isWindow then
-					continue
-				end
-
-				local z = HOUSE.Origin.Z - depth / 2 + (col - 0.5) * brick.X
-				local y = baseY + (row - 0.5) * brick.Y
-				makeBrick(
-					Vector3.new(brick.Z, brick.Y, brick.X),
-					Vector3.new(x, y, z),
-					brickColor(row, col),
-					Enum.Material.Brick,
-					folder
-				)
-			end
-		end
-	end
-
-	-- flat roof laid over the footprint
-	if HOUSE.Roof then
-		local roofY = HOUSE.Origin.Y + HOUSE.HeightBricks * brick.Y + brick.Y / 2
-		for col = 1, HOUSE.WidthBricks do
-			for row = 1, HOUSE.DepthBricks do
-				local x = HOUSE.Origin.X - width / 2 + (col - 0.5) * brick.X
-				local z = HOUSE.Origin.Z - depth / 2 + (row - 0.5) * brick.X
-				makeBrick(
-					Vector3.new(brick.X, brick.Y, brick.X),
-					Vector3.new(x, roofY, z),
-					HouseConfig.Palette.Roof,
-					Enum.Material.Slate,
-					folder
-				)
-			end
-		end
+	for index, position in ipairs(positions) do
+		local style = pool[((index - 1) % #pool) + 1]
+		local house = HouseBuilder.build(style, position)
+		house.Parent = folder
+		table.insert(currentNames, style.name)
 	end
 
 	folder.Parent = workspace   -- parent once, at the end
-	houseFolder = folder
+	neighbourhood = folder
 
-	print(("House built: %d breakable bricks (%d x %d studs, %d rows)")
-		:format(#folder:GetChildren(), width, depth, HOUSE.HeightBricks))
+	local bricks = #folder:GetDescendants()
+	print(("Neighbourhood built: %s -- %d breakable parts")
+		:format(table.concat(currentNames, ", "), bricks))
+end
+
+local function broadcastSwitchState()
+	switchState:FireAllClients(switchReadyAt, currentNames)
 end
 
 local function rebuildNow()
-	if houseFolder then
-		houseFolder:Destroy()
-		houseFolder = nil
+	if neighbourhood then
+		neighbourhood:Destroy()
+		neighbourhood = nil
 	end
-	buildHouse()
+	buildNeighbourhood()
+	switchReadyAt = workspace:GetServerTimeNow() + HOUSE.SwitchCooldown
+	broadcastSwitchState()
 end
 
-buildHouse()
+rebuildNow()
 
 -- ===========================================================
---  Rebuild on demand
---
---  Exposed as a signal rather than a function so anything on the
---  server can ask for a fresh house without requiring this script.
+--  Switching
+-- ===========================================================
+
+requestSwitch.OnServerEvent:Connect(function(player)
+	-- the client hides the button early, but the server is what decides
+	if workspace:GetServerTimeNow() < switchReadyAt then
+		return
+	end
+	print(("%s switched the neighbourhood"):format(player.Name))
+	rebuildNow()
+end)
+
+-- late joiners need the current deadline
+game:GetService("Players").PlayerAdded:Connect(function(player)
+	task.wait(1)
+	switchState:FireClient(player, switchReadyAt, currentNames)
+end)
+
+-- ===========================================================
+--  Rebuild once the place has been flattened
 -- ===========================================================
 
 local rebuildSignal = Instance.new("BindableEvent")
 rebuildSignal.Name = "RebuildHouse"
 rebuildSignal.Parent = ServerStorage
 rebuildSignal.Event:Connect(rebuildNow)
-
--- ===========================================================
---  Rebuild once the place has been flattened
--- ===========================================================
 
 task.spawn(function()
 	while true do
@@ -182,7 +157,7 @@ task.spawn(function()
 			continue
 		end
 
-		print(("House flattened. Rebuilding in %ds."):format(HOUSE.RebuildDelay))
+		print(("Neighbourhood flattened. Rebuilding in %ds."):format(HOUSE.RebuildDelay))
 		task.wait(HOUSE.RebuildDelay)
 		rebuildNow()
 	end

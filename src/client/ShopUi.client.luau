@@ -166,8 +166,10 @@ local function addRow(item, infoType: EnumItem, isOwned: (() -> boolean)?, promp
 	buy.Parent = row
 	round(buy, 8)
 
+	-- No id yet: show the intended price so the shop reads as finished
+	-- during development, but make it obviously not buyable.
 	if not (item.id and item.id > 0) then
-		buy.Text = "soon"
+		buy.Text = item.robux and ("R$ " .. item.robux) or "soon"
 		buy.BackgroundColor3 = Color3.fromRGB(74, 66, 74)
 		buy.TextColor3 = Color3.fromRGB(150, 142, 150)
 		buy.AutoButtonColor = false
@@ -216,22 +218,18 @@ end
 local refreshers: { () -> () } = {}
 
 for _, pass in ipairs(ShopConfig.GamePasses) do
-	local owned
-	if pass.key == "Sledgehammer" then
-		owned = function()
-			return ((player:GetAttribute("HammerTier") :: number?) or 1) >= 2
-		end
-	elseif pass.key == "AdminCommands" then
-		owned = function()
-			return player:GetAttribute("Admin") == true
-		end
-	end
+	-- every pass has a Pass_<key> attribute, so no per-item mapping here
+	local attribute = "Pass_" .. pass.key
 
-	local refresh = addRow(pass, Enum.InfoType.GamePass, owned, function()
+	local refresh = addRow(pass, Enum.InfoType.GamePass, function()
+		return player:GetAttribute(attribute) == true
+	end, function()
 		MarketplaceService:PromptGamePassPurchase(player, pass.id)
 	end)
+
 	if refresh then
 		table.insert(refreshers, refresh)
+		player:GetAttributeChangedSignal(attribute):Connect(refresh)
 	end
 end
 
@@ -242,13 +240,5 @@ for _, product in ipairs(ShopConfig.Products) do
 	end)
 end
 
--- the server flips these attributes once Roblox confirms a purchase,
--- so the button state follows the grant rather than the click
-local function refreshAll()
-	for _, refresh in ipairs(refreshers) do
-		refresh()
-	end
-end
-
-player:GetAttributeChangedSignal("HammerTier"):Connect(refreshAll)
-player:GetAttributeChangedSignal("Admin"):Connect(refreshAll)
+-- The server flips those attributes only once Roblox confirms the
+-- purchase, so the OWNED state follows the grant, never the click.

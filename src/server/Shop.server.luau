@@ -29,22 +29,17 @@ local function ownsPass(player: Player, passId: number): boolean
 	return ok and owns == true
 end
 
+-- Every pass becomes a Pass_<key> attribute. Other scripts watch the
+-- attribute they care about, so adding a pass to ShopConfig needs no
+-- change here -- only in whatever script grants the perk.
 local function refreshPasses(player: Player)
-	local tier = 1
-	local admin = false
-
 	for _, pass in ipairs(ShopConfig.GamePasses) do
-		if ownsPass(player, pass.id) then
-			if pass.key == "Sledgehammer" then
-				tier = math.max(tier, 2)
-			elseif pass.key == "AdminCommands" then
-				admin = true
-			end
-		end
+		player:SetAttribute("Pass_" .. pass.key, ownsPass(player, pass.id))
 	end
 
-	player:SetAttribute("HammerTier", tier)
-	player:SetAttribute("Admin", admin)
+	-- two derived conveniences, so consumers do not repeat the mapping
+	player:SetAttribute("HammerTier", player:GetAttribute("Pass_Sledgehammer") == true and 2 or 1)
+	player:SetAttribute("Admin", player:GetAttribute("Pass_AdminCommands") == true)
 end
 
 -- grant the moment they buy, rather than making them rejoin
@@ -55,8 +50,14 @@ MarketplaceService.PromptGamePassPurchaseFinished:Connect(function(player, _pass
 end)
 
 Players.PlayerAdded:Connect(function(player)
+	-- set every attribute to a known value first, so listeners never
+	-- read nil while UserOwnsGamePassAsync is still in flight
+	for _, pass in ipairs(ShopConfig.GamePasses) do
+		player:SetAttribute("Pass_" .. pass.key, false)
+	end
 	player:SetAttribute("HammerTier", 1)
 	player:SetAttribute("Admin", false)
+
 	task.spawn(refreshPasses, player)
 end)
 
