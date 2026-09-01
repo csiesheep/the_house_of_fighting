@@ -11,6 +11,7 @@ local Players            = game:GetService("Players")
 local MarketplaceService = game:GetService("MarketplaceService")
 local ReplicatedStorage  = game:GetService("ReplicatedStorage")
 local DataStoreService   = game:GetService("DataStoreService")
+local RunService         = game:GetService("RunService")
 
 local ShopConfig = require(ReplicatedStorage:WaitForChild("ShopConfig"))
 local Breaking   = require(ReplicatedStorage:WaitForChild("Breaking"))
@@ -65,7 +66,21 @@ end)
 --  Developer products (consumables)
 -- ===========================================================
 
-local receiptStore = DataStoreService:GetDataStore("PurchaseReceipts")
+-- GetDataStore throws outright in Studio when "Enable Studio Access to
+-- API Services" is off. Losing receipt de-duplication is survivable;
+-- taking the whole shop script down with it is not.
+local receiptStore: DataStore? = nil
+do
+	local ok, store = pcall(function()
+		return DataStoreService:GetDataStore("PurchaseReceipts")
+	end)
+	if ok then
+		receiptStore = store
+	else
+		warn("DataStore unavailable -- purchases will not be de-duplicated. "
+			.. "Turn on Game Settings > Security > Enable Studio Access to API Services.")
+	end
+end
 
 local productHandlers: { [number]: (Player) -> boolean } = {}
 
@@ -102,15 +117,27 @@ MarketplaceService.ProcessReceipt = function(receiptInfo)
 	-- Never grant the same PurchaseId twice. Without this, a server
 	-- restart mid-purchase can hand out a paid item more than once.
 	local key = "receipt_" .. receiptInfo.PurchaseId
-	local alreadyGranted = false
-	local readOk = pcall(function()
-		alreadyGranted = receiptStore:GetAsync(key) ~= nil
-	end)
-	if not readOk then
-		return Enum.ProductPurchaseDecision.NotProcessedYet
-	end
-	if alreadyGranted then
-		return Enum.ProductPurchaseDecision.PurchaseGranted
+
+	if not receiptStore then
+		-- No store. In Studio that is just the API setting being off and
+		-- purchases are simulated anyway, so let testing proceed. In a
+		-- live game it means we cannot promise a single grant, and
+		-- refusing is the only honest answer.
+		if not RunService:IsStudio() then
+			warn("Refusing purchase: no DataStore, cannot guarantee single grant.")
+			return Enum.ProductPurchaseDecision.NotProcessedYet
+		end
+	else
+		local alreadyGranted = false
+		local readOk = pcall(function()
+			alreadyGranted = receiptStore:GetAsync(key) ~= nil
+		end)
+		if not readOk then
+			return Enum.ProductPurchaseDecision.NotProcessedYet
+		end
+		if alreadyGranted then
+			return Enum.ProductPurchaseDecision.PurchaseGranted
+		end
 	end
 
 	local ok, granted = pcall(handler, player)
@@ -118,9 +145,11 @@ MarketplaceService.ProcessReceipt = function(receiptInfo)
 		return Enum.ProductPurchaseDecision.NotProcessedYet
 	end
 
-	pcall(function()
-		receiptStore:SetAsync(key, true)
-	end)
+	if receiptStore then
+		pcall(function()
+			receiptStore:SetAsync(key, true)
+		end)
+	end
 
 	return Enum.ProductPurchaseDecision.PurchaseGranted
 end
