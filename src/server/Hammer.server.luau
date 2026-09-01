@@ -15,7 +15,7 @@
 local Players           = game:GetService("Players")
 local CollectionService = game:GetService("CollectionService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local TweenService      = game:GetService("TweenService")
+local RunService        = game:GetService("RunService")
 
 local HouseConfig = require(ReplicatedStorage:WaitForChild("HouseConfig"))
 local ShopConfig  = require(ReplicatedStorage:WaitForChild("ShopConfig"))
@@ -71,14 +71,13 @@ local function buildHammer(spec): Tool
 end
 
 -- ===========================================================
---  Animating the arm
+--  Finding the shoulder
 --
---  Roblox has no built-in swing animation to load, so the
---  shoulder joint is driven directly. R15 and R6 keep it in
---  different places, hence the lookup.
+--  R15 keeps it at RightUpperArm.RightShoulder, R6 at
+--  Torso["Right Shoulder"]. Rather than trust either layout,
+--  fall through to scanning for any Motor6D driving the right
+--  arm -- rig names have moved before and will again.
 -- ===========================================================
-
-local restC0: { [Motor6D]: CFrame } = {}
 
 local function shoulderOf(character: Model): Motor6D?
 	local upper = character:FindFirstChild("RightUpperArm")
@@ -97,12 +96,23 @@ local function shoulderOf(character: Model): Motor6D?
 		end
 	end
 
+	for _, descendant in ipairs(character:GetDescendants()) do
+		if descendant:IsA("Motor6D") then
+			local name = descendant.Name
+			if name == "RightShoulder" or name == "Right Shoulder" then
+				return descendant
+			end
+		end
+	end
+
 	return nil
 end
 
--- Always tween back to the pose the joint had before we ever touched
--- it. Tweening back to "wherever it is now" lets the arm drift a few
--- degrees per swing until the character is holding it sideways.
+-- Always return to the pose the joint had before we touched it.
+-- Returning to "wherever it is now" drifts the arm a few degrees per
+-- swing until the character holds the hammer sideways.
+local restC0: { [Motor6D]: CFrame } = {}
+
 local function poseOf(motor: Motor6D): CFrame
 	local rest = restC0[motor]
 	if not rest then
@@ -112,38 +122,97 @@ local function poseOf(motor: Motor6D): CFrame
 	return rest
 end
 
-local function playSwing(character: Model, tool: Tool)
-	local motor = shoulderOf(character)
+-- one line per player, so a rig we cannot drive says so instead of
+-- silently falling back forever
+local reported: { [Player]: boolean } = {}
 
-	if not motor then
-		-- unusual rig: fall back to snapping the grip so the swing is
-		-- still visible, even if the arm does not move
-		tool.Grip = restGrip * CFrame.Angles(0, 0, math.rad(-75))
-		task.wait(SWING.RaiseTime + SWING.ChopTime)
-		tool.Grip = restGrip
+local function report(player: Player, character: Model, motor: Motor6D?)
+	if reported[player] then
 		return
 	end
+	reported[player] = true
 
-	local rest = poseOf(motor)
+	local humanoid = character:FindFirstChildOfClass("Humanoid")
+	local rig = humanoid and humanoid.RigType.Name or "unknown"
 
-	TweenService:Create(motor, TweenInfo.new(SWING.RaiseTime, Enum.EasingStyle.Quad,
-		Enum.EasingDirection.Out), {
-		C0 = rest * CFrame.Angles(math.rad(SWING.RaiseAngle), 0, 0),
-	}):Play()
-	task.wait(SWING.RaiseTime)
+	if motor then
+		print(("Hammer: %s is %s, swinging %s"):format(player.Name, rig, motor:GetFullName()))
+	else
+		warn(("Hammer: %s is %s and has no right shoulder Motor6D. "):format(player.Name, rig)
+			.. "Falling back to swinging the tool only.")
+	end
+end
 
-	TweenService:Create(motor, TweenInfo.new(SWING.ChopTime, Enum.EasingStyle.Quad,
-		Enum.EasingDirection.In), {
-		C0 = rest * CFrame.Angles(math.rad(SWING.ChopAngle), 0, 0),
-	}):Play()
-	task.wait(SWING.ChopTime)
+-- ===========================================================
+--  The swing arc
+-- ===========================================================
 
-	-- the caller lands the hit here, at the bottom of the chop
+local SWING_TOTAL = SWING.RaiseTime + SWING.ChopTime + SWING.HoldTime + SWING.ReturnTime
+local IMPACT_AT = SWING.RaiseTime + SWING.ChopTime
 
-	task.delay(SWING.HoldTime, function()
-		if motor.Parent then
-			TweenService:Create(motor, TweenInfo.new(SWING.ReturnTime,
-				Enum.EasingStyle.Quad, Enum.EasingDirection.Out), { C0 = rest }):Play()
+-- degrees at time t through the swing
+local function angleAt(t: number): number
+	if t < SWING.RaiseTime then
+		local a = t / SWING.RaiseTime
+		return SWING.RaiseAngle * (1 - (1 - a) * (1 - a))          -- ease out, rearing back
+	end
+	t -= SWING.RaiseTime
+
+	if t < SWING.ChopTime then
+		local a = t / SWING.ChopTime
+		return SWING.RaiseAngle + (SWING.ChopAngle - SWING.RaiseAngle) * (a * a)   -- ease in, accelerating down
+	end
+	t -= SWING.ChopTime
+
+	if t < SWING.HoldTime then
+		return SWING.ChopAngle                                      -- land on it
+	end
+	t -= SWING.HoldTime
+
+	if t < SWING.ReturnTime then
+		local a = t / SWING.ReturnTime
+		return SWING.ChopAngle * (1 - a)
+	end
+
+	return 0
+end
+
+-- Driven per frame rather than by TweenService. The Animator writes
+-- the arm pose every frame, and a tween that only sets C0 once at the
+-- start loses the argument.
+local function playSwing(player: Player, character: Model, tool: Tool)
+	local motor = shoulderOf(character)
+	report(player, character, motor)
+
+	local rest = motor and poseOf(motor) or nil
+
+	-- with no joint to drive, the tool has to carry the whole motion
+	local gripFactor = motor and 0.4 or 1.0
+
+	local started = os.clock()
+	local connection: RBXScriptConnection
+
+	connection = RunService.Heartbeat:Connect(function()
+		local elapsed = os.clock() - started
+		local finished = elapsed >= SWING_TOTAL
+		local degrees = finished and 0 or angleAt(elapsed)
+
+		if motor and motor.Parent and rest then
+			motor.C0 = rest * CFrame.Angles(math.rad(degrees), 0, 0)
+		end
+
+		if tool.Parent then
+			tool.Grip = restGrip * CFrame.Angles(0, 0, math.rad(degrees * gripFactor))
+		end
+
+		if finished then
+			connection:Disconnect()
+			if motor and motor.Parent and rest then
+				motor.C0 = rest
+			end
+			if tool.Parent then
+				tool.Grip = restGrip
+			end
 		end
 	end)
 end
@@ -195,12 +264,12 @@ local function swingLoop(player: Player, tool: Tool)
 		end
 
 		local spec = tierOf(player)
-		playSwing(character, tool)
+		playSwing(player, character, tool)
+
+		task.wait(IMPACT_AT)
 		connect(player, spec)
 
-		-- the animation already consumed part of the cooldown
-		local spent = SWING.RaiseTime + SWING.ChopTime
-		local remaining = spec.cooldown - spent
+		local remaining = spec.cooldown - IMPACT_AT
 		if remaining > 0 then
 			task.wait(remaining)
 		else
@@ -258,7 +327,8 @@ end
 Players.PlayerAdded:Connect(function(player)
 	player.CharacterAdded:Connect(function()
 		holding[player] = false
-		task.wait(0.2)   -- Backpack is emptied on respawn; wait it out
+		reported[player] = nil     -- rig can differ between lives
+		task.wait(0.2)             -- Backpack is emptied on respawn; wait it out
 		giveHammer(player)
 	end)
 
@@ -273,6 +343,7 @@ end)
 Players.PlayerRemoving:Connect(function(player)
 	holding[player] = nil
 	looping[player] = nil
+	reported[player] = nil
 end)
 
 print("Hammer ready: hold to swing, tier 1 and 2 configured")
