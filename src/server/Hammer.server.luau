@@ -2,14 +2,13 @@
 -- ===========================================================
 --  THE HOUSE OF FIGHTING -- the hammer
 --
---  Hold the mouse and the character keeps swinging: the arm
---  rears back over the shoulder, chops down, and the hit lands
---  at the bottom of the chop rather than the instant you
---  clicked. Damage follows the animation, not the input.
+--  Hold the mouse and the character keeps swinging. The hit
+--  lands at the bottom of the chop, and it lands where the
+--  hammer head actually is, not along a ray from the chest.
 --
---  Which hammer you get is read from the HammerTier attribute,
---  set by Shop.server.luau. This script never asks who owns
---  what -- it just rebuilds the tool when the tier changes.
+--  Rig note: characters here reported zero Motor6D joints, so
+--  the arm driver looks for anything joint-shaped rather than
+--  one class, and says exactly what it found when it fails.
 -- ===========================================================
 
 local Players           = game:GetService("Players")
@@ -71,85 +70,120 @@ local function buildHammer(spec): Tool
 end
 
 -- ===========================================================
---  Finding the shoulder
+--  Driving the arm, whatever the rig calls its joints
 --
---  R15 keeps it at RightUpperArm.RightShoulder, R6 at
---  Torso["Right Shoulder"]. Rather than trust either layout,
---  fall through to scanning for any Motor6D driving the right
---  arm -- rig names have moved before and will again.
+--  A driver is just "put the arm at this angle" plus "put it
+--  back". Motor6D and friends expose C0; AnimationConstraint
+--  exposes Transform. Anything else, we do not pretend.
 -- ===========================================================
 
--- the joint that moves this part
-local function motorDriving(character: Model, part: BasePart?): Motor6D?
-	if not part then
-		return nil
+type Driver = {
+	name: string,
+	apply: (number) -> (),
+	reset: () -> (),
+}
+
+local function endsOf(joint: Instance): (BasePart?, BasePart?)
+	if joint:IsA("JointInstance") then
+		return joint.Part0, joint.Part1
 	end
-	for _, descendant in ipairs(character:GetDescendants()) do
-		if descendant:IsA("Motor6D") and descendant.Part1 == part then
-			return descendant
-		end
+	if joint:IsA("AnimationConstraint") then
+		local a0, a1 = joint.Attachment0, joint.Attachment1
+		local p0 = a0 and a0.Parent
+		local p1 = a1 and a1.Parent
+		return (p0 and p0:IsA("BasePart")) and p0 or nil,
+			(p1 and p1:IsA("BasePart")) and p1 or nil
 	end
+	return nil, nil
+end
+
+local function isJoint(instance: Instance): boolean
+	return instance:IsA("JointInstance") or instance:IsA("AnimationConstraint")
+end
+
+local function driverFor(joint: Instance): Driver?
+	if joint:IsA("JointInstance") then
+		local rest = joint.C0
+		return {
+			name = joint.Name,
+			apply = function(degrees)
+				joint.C0 = rest * CFrame.Angles(math.rad(degrees), 0, 0)
+			end,
+			reset = function()
+				joint.C0 = rest
+			end,
+		}
+	end
+
+	if joint:IsA("AnimationConstraint") then
+		local rest = joint.Transform
+		return {
+			name = joint.Name,
+			apply = function(degrees)
+				joint.Transform = rest * CFrame.Angles(math.rad(degrees), 0, 0)
+			end,
+			reset = function()
+				joint.Transform = rest
+			end,
+		}
+	end
+
 	return nil
 end
 
--- the hand the tool is actually welded into
 local function gripHandOf(character: Model): BasePart?
 	local grip = character:FindFirstChild("RightGrip", true)
 	if grip and grip:IsA("Weld") and grip.Part0 then
 		return grip.Part0
 	end
-
 	local named = character:FindFirstChild("RightHand") or character:FindFirstChild("Right Arm")
 	return (named and named:IsA("BasePart")) and named or nil
 end
 
--- Walk up the skeleton from the hand until the joint we are holding
--- hangs off the torso. That last joint is the shoulder, whatever the
--- rig chose to call it -- which matters, because searching by name
--- found nothing on a stock R15 character.
-local function shoulderOf(character: Model): Motor6D?
-	local motor = motorDriving(character, gripHandOf(character))
-	if not motor then
+local function jointDriving(character: Model, part: BasePart?): Instance?
+	if not part then
+		return nil
+	end
+	for _, descendant in ipairs(character:GetDescendants()) do
+		if isJoint(descendant) then
+			local _, child = endsOf(descendant)
+			if child == part then
+				return descendant
+			end
+		end
+	end
+	return nil
+end
+
+-- walk hand -> wrist -> elbow -> shoulder, stopping at the torso
+local function armJointOf(character: Model): Instance?
+	local joint = jointDriving(character, gripHandOf(character))
+	if not joint then
 		return nil
 	end
 
 	for _ = 1, 4 do
-		local parent = motor.Part0
-		if not parent then
+		local parent = select(1, endsOf(joint))
+		if not parent or string.find(string.lower(parent.Name), "torso") then
 			break
 		end
-		if string.find(string.lower(parent.Name), "torso") then
-			break        -- gone as far as the arm goes
-		end
-		local up = motorDriving(character, parent)
+		local up = jointDriving(character, parent)
 		if not up then
 			break
 		end
-		motor = up
+		joint = up
 	end
 
-	return motor
+	return joint
 end
 
--- Always return to the pose the joint had before we touched it.
--- Returning to "wherever it is now" drifts the arm a few degrees per
--- swing until the character holds the hammer sideways.
-local restC0: { [Motor6D]: CFrame } = {}
+-- ===========================================================
+--  Diagnostics, once per life
+-- ===========================================================
 
-local function poseOf(motor: Motor6D): CFrame
-	local rest = restC0[motor]
-	if not rest then
-		rest = motor.C0
-		restC0[motor] = rest
-	end
-	return rest
-end
-
--- one line per player, so a rig we cannot drive says so instead of
--- silently falling back forever
 local reported: { [Player]: boolean } = {}
 
-local function report(player: Player, character: Model, motor: Motor6D?)
+local function report(player: Player, character: Model, driver: Driver?)
 	if reported[player] then
 		return
 	end
@@ -158,30 +192,41 @@ local function report(player: Player, character: Model, motor: Motor6D?)
 	local humanoid = character:FindFirstChildOfClass("Humanoid")
 	local rig = humanoid and humanoid.RigType.Name or "unknown"
 
-	if motor then
-		print(("Hammer: %s is %s, swinging %s (Part0=%s)")
-			:format(player.Name, rig, motor.Name, motor.Part0 and motor.Part0.Name or "?"))
+	if driver then
+		print(("Hammer: %s is %s, driving joint %q"):format(player.Name, rig, driver.name))
 		return
 	end
 
-	-- If this ever fires again, do not make anyone guess a second time:
-	-- print the skeleton we actually got.
-	warn(("Hammer: %s is %s and no arm joint was found. Falling back to the tool only.")
+	warn(("Hammer: %s is %s and has no drivable arm joint. Swinging the tool only.")
 		:format(player.Name, rig))
 
 	local hand = gripHandOf(character)
 	warn("  grip hand: " .. (hand and hand.Name or "none"))
 
+	-- Last time this printed "Motor6Ds (0)", which told us the class was
+	-- wrong but not what the right one is. So: count every class in the
+	-- character, and list anything joint-shaped in full.
+	local counts: { [string]: number } = {}
 	local joints = {}
 	for _, descendant in ipairs(character:GetDescendants()) do
-		if descendant:IsA("Motor6D") then
-			table.insert(joints, ("%s[%s->%s]"):format(
-				descendant.Name,
-				descendant.Part0 and descendant.Part0.Name or "?",
-				descendant.Part1 and descendant.Part1.Name or "?"))
+		local class = descendant.ClassName
+		counts[class] = (counts[class] or 0) + 1
+		if isJoint(descendant) then
+			local p0, p1 = endsOf(descendant)
+			table.insert(joints, ("%s:%s[%s->%s]"):format(
+				class, descendant.Name,
+				p0 and p0.Name or "?", p1 and p1.Name or "?"))
 		end
 	end
-	warn("  Motor6Ds (" .. #joints .. "): " .. (table.concat(joints, ", ") :: string))
+
+	local classList = {}
+	for class, count in pairs(counts) do
+		table.insert(classList, ("%s x%d"):format(class, count))
+	end
+	table.sort(classList)
+
+	warn("  classes: " .. table.concat(classList, ", "))
+	warn("  joints (" .. #joints .. "): " .. (#joints > 0 and table.concat(joints, ", ") or "none"))
 end
 
 -- ===========================================================
@@ -191,47 +236,42 @@ end
 local SWING_TOTAL = SWING.RaiseTime + SWING.ChopTime + SWING.HoldTime + SWING.ReturnTime
 local IMPACT_AT = SWING.RaiseTime + SWING.ChopTime
 
--- degrees at time t through the swing
 local function angleAt(t: number): number
 	if t < SWING.RaiseTime then
 		local a = t / SWING.RaiseTime
-		return SWING.RaiseAngle * (1 - (1 - a) * (1 - a))          -- ease out, rearing back
+		return SWING.RaiseAngle * (1 - (1 - a) * (1 - a))
 	end
 	t -= SWING.RaiseTime
 
 	if t < SWING.ChopTime then
 		local a = t / SWING.ChopTime
-		return SWING.RaiseAngle + (SWING.ChopAngle - SWING.RaiseAngle) * (a * a)   -- ease in, accelerating down
+		return SWING.RaiseAngle + (SWING.ChopAngle - SWING.RaiseAngle) * (a * a)
 	end
 	t -= SWING.ChopTime
 
 	if t < SWING.HoldTime then
-		return SWING.ChopAngle                                      -- land on it
+		return SWING.ChopAngle
 	end
 	t -= SWING.HoldTime
 
 	if t < SWING.ReturnTime then
-		local a = t / SWING.ReturnTime
-		return SWING.ChopAngle * (1 - a)
+		return SWING.ChopAngle * (1 - t / SWING.ReturnTime)
 	end
 
 	return 0
 end
 
--- Driven per frame rather than by TweenService. The Animator writes
--- the arm pose every frame, and a tween that only sets C0 once at the
--- start loses the argument.
+-- Driven per frame: the Animator rewrites the pose every frame, so a
+-- tween that sets the joint once at the start loses the argument.
 local function playSwing(player: Player, character: Model, tool: Tool)
-	local motor = shoulderOf(character)
-	report(player, character, motor)
+	local joint = armJointOf(character)
+	local driver = joint and driverFor(joint) or nil
+	report(player, character, driver)
 
-	local rest = motor and poseOf(motor) or nil
-
-	-- When the arm swings, leave the grip alone: rotating the hammer as
-	-- well as the arm was the "spinning in the hand" you saw. With no
-	-- joint, tilt the tool a little rather than whipping it through
-	-- 185 degrees, which read as a spin rather than a chop.
-	local gripFactor = motor and 0 or 0.3
+	-- With no joint, the tool carries the motion. Scaled well down:
+	-- the full arc is 185 degrees, and putting all of that into the
+	-- wrist looked like the hammer spinning rather than a chop.
+	local gripFactor = driver and 0 or 0.45
 
 	local started = os.clock()
 	local connection: RBXScriptConnection
@@ -241,18 +281,17 @@ local function playSwing(player: Player, character: Model, tool: Tool)
 		local finished = elapsed >= SWING_TOTAL
 		local degrees = finished and 0 or angleAt(elapsed)
 
-		if motor and motor.Parent and rest then
-			motor.C0 = rest * CFrame.Angles(math.rad(degrees), 0, 0)
+		if driver then
+			driver.apply(degrees)
 		end
-
 		if tool.Parent and gripFactor > 0 then
 			tool.Grip = restGrip * CFrame.Angles(math.rad(degrees * gripFactor), 0, 0)
 		end
 
 		if finished then
 			connection:Disconnect()
-			if motor and motor.Parent and rest then
-				motor.C0 = rest
+			if driver then
+				driver.reset()
 			end
 			if tool.Parent then
 				tool.Grip = restGrip
@@ -263,28 +302,55 @@ end
 
 -- ===========================================================
 --  Landing the hit
+--
+--  Previously a single ray forward from the chest, which missed
+--  constantly: it only caught what was dead ahead at one height,
+--  nowhere near where the head visibly was. Now the hit is a
+--  sphere around the hammer head itself, so if the head reached
+--  the brick, the brick takes it.
 -- ===========================================================
 
-local function connect(player: Player, spec)
+local function connect(player: Player, spec, tool: Tool)
 	local character = player.Character
-	local root = character and character:FindFirstChild("HumanoidRootPart")
-	if not (character and root and root:IsA("BasePart")) then
+	if not character then
 		return
 	end
 
-	local params = RaycastParams.new()
-	params.FilterType = Enum.RaycastFilterType.Exclude
-	params.FilterDescendantsInstances = { character }
+	local head = tool:FindFirstChild("Head")
+	local centre: Vector3? = (head and head:IsA("BasePart")) and head.Position or nil
 
-	local origin = root.Position + Vector3.new(0, 1.2, 0)
-	local result = workspace:Raycast(origin, root.CFrame.LookVector * spec.reach, params)
-	if not result then
+	if not centre then
+		local root = character:FindFirstChild("HumanoidRootPart")
+		if not (root and root:IsA("BasePart")) then
+			return
+		end
+		centre = root.Position + root.CFrame.LookVector * 4 + Vector3.new(0, 1, 0)
+	end
+
+	local params = OverlapParams.new()
+	params.FilterType = Enum.RaycastFilterType.Include
+	params.FilterDescendantsInstances = CollectionService:GetTagged(TAG)
+
+	local nearby = workspace:GetPartBoundsInRadius(centre :: Vector3, spec.hitRadius, params)
+	if #nearby == 0 then
 		return
 	end
 
-	local hit = result.Instance
-	if hit and hit:IsA("BasePart") and CollectionService:HasTag(hit, TAG) then
-		Breaking.damage(hit, spec.damage, origin, spec.knockback, player)
+	-- nearest first, so one swing does not scatter across a whole wall
+	table.sort(nearby, function(a, b)
+		return (a.Position - centre :: Vector3).Magnitude
+			< (b.Position - centre :: Vector3).Magnitude
+	end)
+
+	local landed = 0
+	for _, brick in ipairs(nearby) do
+		if landed >= spec.maxHits then
+			break
+		end
+		if brick:IsA("BasePart") then
+			Breaking.damage(brick, spec.damage, centre :: Vector3, spec.knockback, player)
+			landed += 1
+		end
 	end
 end
 
@@ -311,7 +377,7 @@ local function swingLoop(player: Player, tool: Tool)
 		playSwing(player, character, tool)
 
 		task.wait(IMPACT_AT)
-		connect(player, spec)
+		connect(player, spec, tool)
 
 		local remaining = spec.cooldown - IMPACT_AT
 		if remaining > 0 then
@@ -332,9 +398,8 @@ local function giveHammer(player: Player)
 
 	local spec = tierOf(player)
 
-	-- clear any hammer they are holding or carrying, at any tier.
 	-- matching on tier names rather than "every Tool" so upgrading
-	-- does not also confiscate their coils.
+	-- does not also confiscate their coils
 	local isHammerName: { [string]: boolean } = {}
 	for _, tier in pairs(ShopConfig.HammerTiers) do
 		isHammerName[tier.name] = true
@@ -356,11 +421,9 @@ local function giveHammer(player: Player)
 		holding[player] = true
 		task.spawn(swingLoop, player, tool)
 	end)
-
 	tool.Deactivated:Connect(function()
 		holding[player] = false
 	end)
-
 	tool.Unequipped:Connect(function()
 		holding[player] = false
 	end)
@@ -376,7 +439,6 @@ Players.PlayerAdded:Connect(function(player)
 		giveHammer(player)
 	end)
 
-	-- buying the Sledgehammer mid-round swaps the tool in place
 	player:GetAttributeChangedSignal("HammerTier"):Connect(function()
 		if player.Character then
 			giveHammer(player)
@@ -390,4 +452,4 @@ Players.PlayerRemoving:Connect(function(player)
 	reported[player] = nil
 end)
 
-print("Hammer ready: hold to swing, tier 1 and 2 configured")
+print("Hammer ready: hold to swing, head-centred hits")

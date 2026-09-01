@@ -59,11 +59,15 @@ ShopConfig.Products = {
 ShopConfig.HammerTiers = {
 	[1] = {
 		name = "Hammer", damage = 1, reach = 12, knockback = 34, cooldown = 0.45,
+		hitRadius = 6,    -- studs around the hammer head that count as a hit
+		maxHits   = 1,    -- bricks damaged per swing
 		headSize = Vector3.new(1.5, 1.5, 2.8),
 		headColor = Color3.fromRGB(96, 100, 110),
 	},
 	[2] = {
 		name = "Sledgehammer", damage = 3, reach = 16, knockback = 85, cooldown = 0.5,
+		hitRadius = 9,
+		maxHits   = 4,
 		headSize = Vector3.new(2.3, 2.3, 4.2),
 		headColor = Color3.fromRGB(196, 148, 62),
 	},

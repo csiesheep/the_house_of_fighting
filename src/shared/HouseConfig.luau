@@ -7,7 +7,7 @@ local HouseConfig = {}
 
 HouseConfig.House = {
 	BrickSize   = Vector3.new(4, 2, 2),   -- long, tall, thick
-	BrickHealth = 3,                      -- hammer blows to destroy one brick
+	BrickHealth = 2,                      -- hammer blows to destroy one brick
 
 	HouseCount = 3,      -- houses standing at once
 	PlotRadius = 26,     -- how far each sits from the arena centre
