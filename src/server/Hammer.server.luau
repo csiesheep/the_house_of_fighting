@@ -17,6 +17,7 @@
 local Players           = game:GetService("Players")
 local CollectionService = game:GetService("CollectionService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local RunService        = game:GetService("RunService")
 
 local HouseConfig = require(ReplicatedStorage:WaitForChild("HouseConfig"))
 local ShopConfig  = require(ReplicatedStorage:WaitForChild("ShopConfig"))
@@ -85,6 +86,34 @@ swung.Parent = remotes
 remotes.Parent = ReplicatedStorage
 
 local IMPACT_AT = SwingArc.ImpactAt
+
+-- The tool is a server-owned property, so unlike the arm it moves for
+-- everyone without argument. It carries part of the arc so a click
+-- always produces visible motion, whatever the rig does.
+local function animateGrip(tool: Tool)
+	local factor = ShopConfig.Swing.GripFactor
+	if factor <= 0 then
+		return
+	end
+
+	task.spawn(function()
+		local started = os.clock()
+		local connection: RBXScriptConnection
+
+		connection = RunService.Heartbeat:Connect(function()
+			local elapsed = os.clock() - started
+			if elapsed >= SwingArc.Total or not tool.Parent then
+				connection:Disconnect()
+				if tool.Parent then
+					tool.Grip = restGrip
+				end
+				return
+			end
+			tool.Grip = restGrip
+				* CFrame.Angles(math.rad(SwingArc.angleAt(elapsed) * factor), 0, 0)
+		end)
+	end)
+end
 
 -- ===========================================================
 --  Landing the hit
@@ -161,6 +190,7 @@ local function swingLoop(player: Player, tool: Tool)
 
 		local spec = tierOf(player)
 		swung:FireAllClients(player)
+		animateGrip(tool)
 
 		task.wait(IMPACT_AT)
 		connect(player, spec, tool)

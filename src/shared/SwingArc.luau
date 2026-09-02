@@ -119,63 +119,79 @@ function SwingArc.armJointOf(character: Model): Instance?
 	return joint
 end
 
-local function rotation(degrees: number): CFrame
+local function rotation(axis: string, degrees: number): CFrame
 	local r = math.rad(degrees)
-	if SWING.Axis == "Y" then
+	if axis == "Y" then
 		return CFrame.Angles(0, r, 0)
-	elseif SWING.Axis == "Z" then
+	elseif axis == "Z" then
 		return CFrame.Angles(0, 0, r)
 	end
 	return CFrame.Angles(r, 0, 0)
 end
 
--- The rule for both joint types is the same: write to the joint's
--- BASE offset, never to the channel the Animator owns.
---
--- Motor6D keeps that base in C0 while animations write Transform, so
--- C0 is safe. AnimationConstraint has no C0 -- its Transform IS the
--- animated channel, which is why writing there did nothing at all.
--- Its equivalent base is the attachment the joint hangs off, and
--- animations never touch that.
-function SwingArc.driverFor(joint: Instance): Driver?
+-- Which properties are worth writing to on this joint. Rather than
+-- keep guessing which one a rig responds to, the client walks this
+-- list one swing at a time and prints what it tried.
+function SwingArc.combosFor(joint: Instance): { { channel: string, axis: string } }
+	local channels: { string }
 	if joint:IsA("JointInstance") then
-		local rest = joint.C0
+		channels = { "C0", "C1" }
+	elseif joint:IsA("AnimationConstraint") then
+		channels = { "Transform", "Attachment0", "Attachment1" }
+	else
+		return {}
+	end
+
+	local combos = {}
+	for _, channel in ipairs(channels) do
+		for _, axis in ipairs({ "X", "Z", "Y" }) do
+			table.insert(combos, { channel = channel, axis = axis })
+		end
+	end
+	return combos
+end
+
+-- Build a driver for one specific property on one specific axis.
+-- Returns nil when this joint has no such property, so the caller can
+-- skip it rather than erroring.
+function SwingArc.driverFor(joint: Instance, channel: string, axis: string): Driver?
+	local label = ("%s:%s %s/%s"):format(joint.ClassName, joint.Name, channel, axis)
+
+	-- a CFrame property directly on the joint
+	if channel == "C0" or channel == "C1" or channel == "Transform" then
+		local ok, rest = pcall(function()
+			return (joint :: any)[channel] :: CFrame
+		end)
+		if not ok or typeof(rest) ~= "CFrame" then
+			return nil
+		end
 		return {
-			name = joint.ClassName .. ":" .. joint.Name,
+			name = label,
 			apply = function(degrees)
-				joint.C0 = rest * rotation(degrees)
+				(joint :: any)[channel] = rest * rotation(axis, degrees)
 			end,
 			reset = function()
-				joint.C0 = rest
+				(joint :: any)[channel] = rest
 			end,
 		}
 	end
 
-	if joint:IsA("AnimationConstraint") then
-		local anchor = joint.Attachment0
-		if anchor then
-			local rest = anchor.CFrame
-			return {
-				name = joint.ClassName .. ":" .. joint.Name .. " (via " .. anchor.Name .. ")",
-				apply = function(degrees)
-					anchor.CFrame = rest * rotation(degrees)
-				end,
-				reset = function()
-					anchor.CFrame = rest
-				end,
-			}
+	-- the CFrame of one of the joint's attachments
+	if channel == "Attachment0" or channel == "Attachment1" then
+		local ok, anchor = pcall(function()
+			return (joint :: any)[channel]
+		end)
+		if not ok or not anchor or not anchor:IsA("Attachment") then
+			return nil
 		end
-
-		-- no attachment to lean on; Transform is all there is, and the
-		-- render-step ordering on the client is what makes it stick
-		local rest = joint.Transform
+		local rest = anchor.CFrame
 		return {
-			name = joint.ClassName .. ":" .. joint.Name .. " (via Transform)",
+			name = label,
 			apply = function(degrees)
-				joint.Transform = rest * rotation(degrees)
+				anchor.CFrame = rest * rotation(axis, degrees)
 			end,
 			reset = function()
-				joint.Transform = rest
+				anchor.CFrame = rest
 			end,
 		}
 	end

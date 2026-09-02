@@ -2,50 +2,78 @@
 -- ===========================================================
 --  THE HOUSE OF FIGHTING -- swing animation
 --
---  The arm is posed here, on the client, not on the server.
+--  The arm is posed here, on the client. Posing it on the
+--  server did nothing: characters are simulated by the client
+--  that owns them, and that client reasserts its own joint
+--  state before anything reaches the screen.
 --
---  The server was setting the shoulder joint every frame and
---  the arm never moved. Characters are simulated by the client
---  that owns them, and that client keeps reasserting its own
---  joint state, so a server-side pose gets masked before
---  anyone sees it.
---
---  Instead the server just announces "this player swung" and
---  every client plays the arc locally on that character. No
---  replication to fight, and it looks the same to everyone.
---
---  The real fix is an uploaded Animation asset played through
---  the Animator. That needs an asset id, so until there is one
---  this poses the joint directly.
+--  CALIBRATION MODE
+--  ----------------
+--  Four guesses at which property of this rig's shoulder joint
+--  actually moves the arm all missed, so it is no longer a
+--  guess. With ShopConfig.Swing.Calibrate on, each swing tries
+--  the next candidate and prints what it tried. Swing a dozen
+--  times, note which one moved your arm, and that number goes
+--  into Swing.Channel / Swing.Axis to end the search.
 -- ===========================================================
 
 local Players           = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService        = game:GetService("RunService")
 
-local SwingArc = require(ReplicatedStorage:WaitForChild("SwingArc"))
-local remotes  = ReplicatedStorage:WaitForChild("CombatRemotes")
-local swung    = remotes:WaitForChild("SwingStarted")
+local ShopConfig = require(ReplicatedStorage:WaitForChild("ShopConfig"))
+local SwingArc   = require(ReplicatedStorage:WaitForChild("SwingArc"))
+local remotes    = ReplicatedStorage:WaitForChild("CombatRemotes")
+local swung      = remotes:WaitForChild("SwingStarted")
 
--- one swing at a time per character, so holding the mouse does not
--- stack arcs on top of each other and jitter the arm
+local SWING = ShopConfig.Swing
+local player = Players.LocalPlayer
+
 local active: { [Model]: boolean } = {}
-local reported: { [Model]: boolean } = {}
+local attempt = 0
 
-local function play(character: Model)
+local function driverFor(character: Model): (SwingArc.Driver?, string)
+	local joint = SwingArc.armJointOf(character)
+	if not joint then
+		return nil, "no arm joint found"
+	end
+
+	if not SWING.Calibrate then
+		local driver = SwingArc.driverFor(joint, SWING.Channel, SWING.Axis)
+		return driver, driver and driver.name or ("cannot drive " .. SWING.Channel)
+	end
+
+	local combos = SwingArc.combosFor(joint)
+	if #combos == 0 then
+		return nil, "no candidates for " .. joint.ClassName
+	end
+
+	-- walk the list, one candidate per swing, wrapping at the end
+	attempt += 1
+	local index = ((attempt - 1) % #combos) + 1
+	local combo = combos[index]
+
+	local driver = SwingArc.driverFor(joint, combo.channel, combo.axis)
+	local label = ("[%d/%d] %s axis %s"):format(index, #combos, combo.channel, combo.axis)
+
+	if not driver then
+		return nil, label .. " -- not available on this joint"
+	end
+	return driver, label
+end
+
+local function play(character: Model, announce: boolean)
 	if active[character] then
 		return
 	end
 
-	local joint = SwingArc.armJointOf(character)
-	local driver = joint and SwingArc.driverFor(joint) or nil
+	local driver, label = driverFor(character)
 
-	if not reported[character] then
-		reported[character] = true
+	if announce then
 		if driver then
-			print(("SwingAnimator: posing %s on %s"):format(driver.name, character.Name))
+			print("SWING TEST " .. label)
 		else
-			warn(("SwingAnimator: no drivable arm joint on %s"):format(character.Name))
+			warn("SWING TEST " .. label)
 		end
 	end
 
@@ -57,9 +85,8 @@ local function play(character: Model)
 	local started = os.clock()
 
 	-- Bound just after RenderPriority.Character, which is when the
-	-- Animator poses the rig. RenderStepped runs before that, so
-	-- anything written there is overwritten in the same frame and
-	-- never reaches the screen.
+	-- Animator poses the rig. RenderStepped runs before that, so a
+	-- write there is overwritten in the same frame.
 	local step = "Swing_" .. character.Name .. "_" .. tostring(started)
 
 	RunService:BindToRenderStep(step, Enum.RenderPriority.Character.Value + 1, function()
@@ -81,14 +108,14 @@ end
 swung.OnClientEvent:Connect(function(who: Player)
 	local character = who and who.Character
 	if character then
-		play(character)
+		-- only narrate your own swings, or the log is unreadable
+		play(character, who == player)
 	end
 end)
 
-Players.PlayerRemoving:Connect(function(player)
-	local character = player.Character
+Players.PlayerRemoving:Connect(function(who)
+	local character = who.Character
 	if character then
 		active[character] = nil
-		reported[character] = nil
 	end
 end)

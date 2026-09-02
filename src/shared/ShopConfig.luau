@@ -85,10 +85,18 @@ ShopConfig.Swing = {
 	RaiseAngle = -145,   -- degrees at the shoulder, arm up and back
 	ChopAngle  = 40,     -- follow through past vertical
 
-	-- Which local axis of the shoulder joint the swing rotates around.
-	-- X is a forward chop on the rigs seen so far; if the arm swings
-	-- sideways or twists instead, try "Z" then "Y".
-	Axis = "X",
+	-- How much of the arc the tool itself carries, on top of the arm.
+	-- Keeps the swing visible even while the arm is uncooperative.
+	GripFactor = 0.45,
+
+	-- Calibration. Four guesses at which property of this rig's
+	-- shoulder joint moves the arm all missed, so with this on each
+	-- swing tries the next candidate and prints it. Note which one
+	-- moves your arm, put it in Channel/Axis below, set this false.
+	Calibrate = true,
+
+	Channel = "Transform",   -- C0, C1, Transform, Attachment0, Attachment1
+	Axis    = "X",           -- X, Y, Z
 }
 
 ShopConfig.Gear = {
