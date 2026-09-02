@@ -146,10 +146,17 @@ task.spawn(function()
 	while true do
 		task.wait(2)
 
+		-- Count only bricks belonging to the neighbourhood. Counting
+		-- everything tagged would include whatever players have built,
+		-- so a single placed brick anywhere would keep this above zero
+		-- and the houses would never come back.
 		local standing = 0
-		for _, part in ipairs(CollectionService:GetTagged(TAG)) do
-			if part:IsDescendantOf(workspace) then
-				standing += 1
+		local folder = neighbourhood
+		if folder then
+			for _, part in ipairs(CollectionService:GetTagged(TAG)) do
+				if part:IsDescendantOf(folder) then
+					standing += 1
+				end
 			end
 		end
 

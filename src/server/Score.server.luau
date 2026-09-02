@@ -49,6 +49,10 @@ local function setup(player: Player)
 	bricks.Name = "Bricks"
 	bricks.Parent = stats
 
+	local built = Instance.new("IntValue")
+	built.Name = "Built"
+	built.Parent = stats
+
 	local falls = Instance.new("IntValue")
 	falls.Name = "Falls"
 	falls.Parent = stats
