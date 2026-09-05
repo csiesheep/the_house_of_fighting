@@ -4,28 +4,28 @@
 local StageConfig = {}
 
 StageConfig.Arena = {
-	Radius     = 56,                    -- decorative tiling reaches this far
+	Radius     = 132,                   -- decorative tiling reaches this far
 	TileSize   = 8,
 	TileHeight = 1,
 	Origin     = Vector3.new(0, 24, 0),
 
 	SpawnCount  = 8,
-	SpawnRadius = 50,                   -- outside the houses, inside the wall
+	SpawnRadius = 30,                   -- in the plaza, inside the obby ring
 }
 
 -- A solid slab under the tiles. The tiles are a jagged circle, so without
 -- this there are gaps near the diagonals you could drop through.
 StageConfig.Base = {
-	Radius = 68,
+	Radius = 150,
 	Depth  = 8,
 	Inset  = 0.1,     -- sits this far below the tile tops, to avoid z-fighting
 }
 
 StageConfig.Boundary = {
-	Radius    = 66,
+	Radius    = 140,
 	Height    = 90,   -- tall enough that a Gravity Coil will not clear it
 	Thickness = 3,
-	Segments  = 64,
+	Segments  = 120,
 	Transparency = 0.75,   -- barely there, so the wall does not shade the arena
 }
 

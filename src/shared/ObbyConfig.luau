@@ -6,11 +6,12 @@ local ObbyConfig = {}
 ObbyConfig.Course = {
 	Origin = Vector3.new(0, 24, 0),    -- arena floor, same as StageConfig
 
-	-- Sits between the houses and inside the boundary, so it needs no
-	-- gap in the wall and never clips a roof.
+	-- The whole course lives in the central plaza, inside the ring of
+	-- houses. Running it out by the wall would mean every platform
+	-- marching across the house ring to get there.
 	EntryAngleDeg = 55,
-	EntryRadius   = 44,
-	Radius        = 56,
+	EntryRadius   = 45,
+	Radius        = 58,
 
 	PlatformCount = 14,
 	PlatformSize  = Vector3.new(6, 1, 6),
@@ -22,8 +23,8 @@ ObbyConfig.Course = {
 	StartGap = 1.5,
 	EndGap   = 4.5,
 
-	AngleStepDeg   = 11,
-	AngleJitterDeg = 5,
+	AngleStepDeg   = 9,
+	AngleJitterDeg = 3,
 
 	Seed = nil,   -- set a number for the same course every refresh
 }

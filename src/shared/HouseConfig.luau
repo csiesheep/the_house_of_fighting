@@ -9,8 +9,10 @@ HouseConfig.House = {
 	BrickSize   = Vector3.new(4, 2, 2),   -- long, tall, thick
 	BrickHealth = 2,                      -- hammer blows to destroy one brick
 
-	HouseCount = 3,      -- houses standing at once
-	PlotRadius = 26,     -- how far each sits from the arena centre
+	HouseCount = 10,     -- houses standing at once; one of each style
+	PlotRadius = 96,     -- ring radius. At 10 houses this gives 59 studs
+	                     -- between neighbours, against 56 needed for the
+	                     -- widest style, so nothing clips.
 
 	-- When a brick breaks, unanchor whatever was resting on it so the
 	-- wall sags instead of leaving bricks floating in mid air.

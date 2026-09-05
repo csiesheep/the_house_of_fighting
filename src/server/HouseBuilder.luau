@@ -4,6 +4,12 @@
 --
 --  Turns a HouseStyles blueprint into breakable bricks.
 --
+--  Everything is laid out in the house's own space -- X across
+--  the front, Z front-to-back, Y up from the floor -- and then
+--  placed by a pivot CFrame. That is what lets ten houses ring
+--  a plaza with their doors facing inward instead of all
+--  pointing the same way like a car park.
+--
 --  Everything it makes is tagged Breakable and carries Health,
 --  including the glass, the door and the roof. Nothing here
 --  knows what will eventually hit it.
@@ -47,9 +53,13 @@ end
 
 -- ===========================================================
 --  Walls
+--
+--  The door goes in the -Z wall, which is the pivot's
+--  LookVector, so a house placed with CFrame.lookAt facing the
+--  plaza has its front door facing the plaza.
 -- ===========================================================
 
-local function buildWalls(folder: Folder, style: HouseStyles.Style, origin: Vector3)
+local function buildWalls(folder: Folder, style: HouseStyles.Style, pivot: CFrame)
 	local width = style.widthBricks * BRICK.X
 	local depth = style.depthBricks * BRICK.X
 	local rows = style.heightBricks * style.storeys
@@ -65,13 +75,13 @@ local function buildWalls(folder: Folder, style: HouseStyles.Style, origin: Vect
 
 	-- front and back walls run along X
 	for _, side in ipairs({ -1, 1 }) do
-		local z = origin.Z + side * depth / 2
+		local z = side * depth / 2
 
 		for row = 1, rows do
 			for col = 1, style.widthBricks do
-				local x = origin.X - width / 2 + (col - 0.5) * BRICK.X
-				local y = origin.Y + (row - 0.5) * BRICK.Y
-				local at = CFrame.new(x, y, z)
+				local x = -width / 2 + (col - 0.5) * BRICK.X
+				local y = (row - 0.5) * BRICK.Y
+				local at = pivot * CFrame.new(x, y, z)
 
 				local isDoorway = side == -1
 					and row <= style.doorHeight
@@ -100,13 +110,13 @@ local function buildWalls(folder: Folder, style: HouseStyles.Style, origin: Vect
 
 	-- side walls run along Z, so the brick is turned end on
 	for _, side in ipairs({ -1, 1 }) do
-		local x = origin.X + side * width / 2
+		local x = side * width / 2
 
 		for row = 1, rows do
 			for col = 1, style.depthBricks do
-				local z = origin.Z - depth / 2 + (col - 0.5) * BRICK.X
-				local y = origin.Y + (row - 0.5) * BRICK.Y
-				local at = CFrame.new(x, y, z)
+				local z = -depth / 2 + (col - 0.5) * BRICK.X
+				local y = (row - 0.5) * BRICK.Y
+				local at = pivot * CFrame.new(x, y, z)
 
 				local isWindow = windowRow[row] and (col == 2 or col == style.depthBricks - 1)
 				if isWindow then
@@ -125,10 +135,10 @@ local function buildWalls(folder: Folder, style: HouseStyles.Style, origin: Vect
 	-- an upper floor, so a two storey house is not one tall empty box
 	if style.storeys > 1 then
 		for storey = 1, style.storeys - 1 do
-			local y = origin.Y + storey * style.heightBricks * BRICK.Y
+			local y = storey * style.heightBricks * BRICK.Y
 			makePart(folder,
 				Vector3.new(width - BRICK.Z, 0.8, depth - BRICK.Z),
-				CFrame.new(origin.X, y, origin.Z),
+				pivot * CFrame.new(0, y, 0),
 				style.trim, Enum.Material.WoodPlanks, health)
 		end
 	end
@@ -138,7 +148,8 @@ end
 --  Roofs
 -- ===========================================================
 
-local function buildGableEnd(folder: Folder, style: HouseStyles.Style, origin: Vector3, z: number, wallTop: number)
+local function buildGableEnd(folder: Folder, style: HouseStyles.Style, pivot: CFrame,
+	z: number, wallTop: number)
 	local width = style.widthBricks * BRICK.X
 	local courses = math.max(1, math.floor(style.roofRise / BRICK.Y))
 	local health = HouseConfig.House.BrickHealth
@@ -151,24 +162,24 @@ local function buildGableEnd(folder: Folder, style: HouseStyles.Style, origin: V
 		end
 		makePart(folder,
 			Vector3.new(courseWidth, BRICK.Y, BRICK.Z),
-			CFrame.new(origin.X, wallTop + (course - 0.5) * BRICK.Y, z),
+			pivot * CFrame.new(0, wallTop + (course - 0.5) * BRICK.Y, z),
 			style.wallAlt, style.material, health)
 	end
 end
 
-local function buildRoof(folder: Folder, style: HouseStyles.Style, origin: Vector3)
+local function buildRoof(folder: Folder, style: HouseStyles.Style, pivot: CFrame)
 	local width = style.widthBricks * BRICK.X
 	local depth = style.depthBricks * BRICK.X
-	local wallTop = origin.Y + style.heightBricks * style.storeys * BRICK.Y
+	local wallTop = style.heightBricks * style.storeys * BRICK.Y
 	local health = HouseConfig.House.BrickHealth
 
 	if style.roof == "flat" then
 		for col = 1, style.widthBricks do
 			for row = 1, style.depthBricks do
-				local x = origin.X - width / 2 + (col - 0.5) * BRICK.X
-				local z = origin.Z - depth / 2 + (row - 0.5) * BRICK.X
+				local x = -width / 2 + (col - 0.5) * BRICK.X
+				local z = -depth / 2 + (row - 0.5) * BRICK.X
 				makePart(folder, Vector3.new(BRICK.X, BRICK.Y, BRICK.X),
-					CFrame.new(x, wallTop + BRICK.Y / 2, z),
+					pivot * CFrame.new(x, wallTop + BRICK.Y / 2, z),
 					style.roofColor, Enum.Material.Slate, health)
 			end
 		end
@@ -185,18 +196,15 @@ local function buildRoof(folder: Folder, style: HouseStyles.Style, origin: Vecto
 	for _, side in ipairs({ -1, 1 }) do
 		local panel = makePart(folder,
 			Vector3.new(slope + overhang, 1.2, depth + overhang * 2),
-			CFrame.new(
-				origin.X + side * run / 2,
-				wallTop + rise / 2,
-				origin.Z
-			) * CFrame.Angles(0, 0, -side * pitch),
+			pivot * CFrame.new(side * run / 2, wallTop + rise / 2, 0)
+				* CFrame.Angles(0, 0, -side * pitch),
 			style.roofColor, Enum.Material.Slate, health)
 		panel.Name = "Roof"
 	end
 
 	if style.roof == "gable" then
-		buildGableEnd(folder, style, origin, origin.Z - depth / 2, wallTop)
-		buildGableEnd(folder, style, origin, origin.Z + depth / 2, wallTop)
+		buildGableEnd(folder, style, pivot, -depth / 2, wallTop)
+		buildGableEnd(folder, style, pivot, depth / 2, wallTop)
 	else
 		-- hip: close the ends with sloped panels instead of vertical gables
 		local endRun = depth / 2
@@ -206,48 +214,45 @@ local function buildRoof(folder: Folder, style: HouseStyles.Style, origin: Vecto
 		for _, side in ipairs({ -1, 1 }) do
 			local panel = makePart(folder,
 				Vector3.new(width + overhang, 1.2, endSlope + overhang),
-				CFrame.new(
-					origin.X,
-					wallTop + rise / 2,
-					origin.Z + side * endRun / 2
-				) * CFrame.Angles(side * endPitch, 0, 0),
+				pivot * CFrame.new(0, wallTop + rise / 2, side * endRun / 2)
+					* CFrame.Angles(side * endPitch, 0, 0),
 				style.roofColor, Enum.Material.Slate, health)
 			panel.Name = "Roof"
 		end
 	end
 end
 
-local function buildChimney(folder: Folder, style: HouseStyles.Style, origin: Vector3)
+local function buildChimney(folder: Folder, style: HouseStyles.Style, pivot: CFrame)
 	if not style.chimney then
 		return
 	end
 
 	local width = style.widthBricks * BRICK.X
 	local depth = style.depthBricks * BRICK.X
-	local wallTop = origin.Y + style.heightBricks * style.storeys * BRICK.Y
+	local wallTop = style.heightBricks * style.storeys * BRICK.Y
 	local health = HouseConfig.House.BrickHealth
 
-	local x = origin.X + width / 2 - BRICK.X
-	local z = origin.Z + depth / 2 - BRICK.X
+	local x = width / 2 - BRICK.X
+	local z = depth / 2 - BRICK.X
 	local stack = math.max(3, math.floor(style.roofRise / BRICK.Y) + 2)
 
 	for course = 1, stack do
 		makePart(folder,
 			Vector3.new(BRICK.X * 0.8, BRICK.Y, BRICK.X * 0.8),
-			CFrame.new(x, wallTop + (course - 0.5) * BRICK.Y, z),
+			pivot * CFrame.new(x, wallTop + (course - 0.5) * BRICK.Y, z),
 			style.wallAlt, style.material, health)
 	end
 end
 
 -- ===========================================================
 
-function HouseBuilder.build(style: HouseStyles.Style, origin: Vector3): Folder
+function HouseBuilder.build(style: HouseStyles.Style, pivot: CFrame): Folder
 	local folder = Instance.new("Folder")
 	folder.Name = style.name:gsub("%s", "")
 
-	buildWalls(folder, style, origin)
-	buildRoof(folder, style, origin)
-	buildChimney(folder, style, origin)
+	buildWalls(folder, style, pivot)
+	buildRoof(folder, style, pivot)
+	buildChimney(folder, style, pivot)
 
 	return folder
 end

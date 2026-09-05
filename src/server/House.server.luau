@@ -47,24 +47,28 @@ local rng = Random.new()
 local switchReadyAt = 0
 local currentNames = {}
 
-local function plotPositions(): { Vector3 }
-	local positions = {}
+-- Houses ring a central plaza, each turned to face it. The door is in
+-- the house's -Z wall, which is a CFrame's LookVector, so pointing the
+-- pivot at the centre points the front door at the centre.
+local function plotPivots(): { CFrame }
+	local pivots = {}
 	local count = HOUSE.HouseCount
 	local origin = StageConfig.Arena.Origin
 
 	if count == 1 then
-		return { origin }
+		return { CFrame.new(origin) }
 	end
 
 	for i = 1, count do
 		local angle = (i - 1) / count * math.pi * 2
-		table.insert(positions, origin + Vector3.new(
+		local position = origin + Vector3.new(
 			math.cos(angle) * HOUSE.PlotRadius,
 			0,
 			math.sin(angle) * HOUSE.PlotRadius
-		))
+		)
+		table.insert(pivots, CFrame.lookAt(position, origin))
 	end
-	return positions
+	return pivots
 end
 
 local function buildNeighbourhood()
@@ -72,7 +76,7 @@ local function buildNeighbourhood()
 	folder.Name = "Neighbourhood"
 
 	currentNames = {}
-	local positions = plotPositions()
+	local pivots = plotPivots()
 
 	-- draw styles without repeating until the list runs out, so a
 	-- switch actually looks different rather than rolling the same
@@ -83,9 +87,9 @@ local function buildNeighbourhood()
 		pool[i], pool[j] = pool[j], pool[i]
 	end
 
-	for index, position in ipairs(positions) do
+	for index, pivot in ipairs(pivots) do
 		local style = pool[((index - 1) % #pool) + 1]
-		local house = HouseBuilder.build(style, position)
+		local house = HouseBuilder.build(style, pivot)
 		house.Parent = folder
 		table.insert(currentNames, style.name)
 	end
