@@ -157,13 +157,20 @@ local function connect(player: Player, spec, tool: Tool)
 			< (b.Position - centre :: Vector3).Magnitude
 	end)
 
+	-- Glass Houses turns this up; normally it is 1
+	local multiplier = workspace:GetAttribute("DamageMultiplier")
+	if typeof(multiplier) ~= "number" or multiplier <= 0 then
+		multiplier = 1
+	end
+	local damage = spec.damage * multiplier
+
 	local landed = 0
 	for _, brick in ipairs(nearby) do
 		if landed >= spec.maxHits then
 			break
 		end
 		if brick:IsA("BasePart") then
-			Breaking.damage(brick, spec.damage, centre :: Vector3, spec.knockback, player)
+			Breaking.damage(brick, damage, centre :: Vector3, spec.knockback, player)
 			landed += 1
 		end
 	end

@@ -205,7 +205,12 @@ Breaking.Destroyed:Connect(function(credit: Player?, _brick: BasePart)
 		return
 	end
 
-	coins.Value += math.max(0, MarketConfig.Economy.CoinsPerBrick)
+	-- the hourly event publishes this; nothing here knows it exists
+	local multiplier = workspace:GetAttribute("CoinMultiplier")
+	if typeof(multiplier) ~= "number" or multiplier <= 0 then
+		multiplier = 1
+	end
+	coins.Value += math.max(0, math.floor(MarketConfig.Economy.CoinsPerBrick * multiplier))
 end)
 
 -- ===========================================================

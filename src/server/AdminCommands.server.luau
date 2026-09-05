@@ -21,6 +21,7 @@ local ServerStorage     = game:GetService("ServerStorage")
 local ShopConfig  = require(ReplicatedStorage:WaitForChild("ShopConfig"))
 local HouseConfig = require(ReplicatedStorage:WaitForChild("HouseConfig"))
 local Breaking    = require(ReplicatedStorage:WaitForChild("Breaking"))
+local Movement    = require(ReplicatedStorage:WaitForChild("Movement"))
 
 local ADMIN = ShopConfig.Admin
 
@@ -95,11 +96,7 @@ commands["heal"] = function(player)
 end
 
 commands["reset"] = function(player)
-	local humanoid = humanoidOf(player)
-	if not humanoid then return end
-	humanoid.WalkSpeed = 16
-	humanoid.UseJumpPower = true
-	humanoid.JumpPower = 50
+	Movement.reset(player)
 	tell(player, "speed and jump back to default")
 end
 

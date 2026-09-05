@@ -172,14 +172,20 @@ local function award(player: Player)
 	end
 	claimed[player] = true
 
+	local multiplier = workspace:GetAttribute("CoinMultiplier")
+	if typeof(multiplier) ~= "number" or multiplier <= 0 then
+		multiplier = 1
+	end
+	local payout = math.floor(RULES.Reward * multiplier)
+
 	local stats = player:FindFirstChild("leaderstats")
 	local coins = stats and stats:FindFirstChild("Coins")
 	if coins and coins:IsA("IntValue") then
-		coins.Value += RULES.Reward
+		coins.Value += payout
 	end
 
-	rewarded:FireClient(player, RULES.Reward)
-	print(("%s finished the obby: +%d coins"):format(player.Name, RULES.Reward))
+	rewarded:FireClient(player, payout)
+	print(("%s finished the obby: +%d coins"):format(player.Name, payout))
 end
 
 local function wireFinish(finish: Part?)

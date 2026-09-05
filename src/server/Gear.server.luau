@@ -14,6 +14,7 @@ local TweenService      = game:GetService("TweenService")
 
 local ShopConfig = require(ReplicatedStorage:WaitForChild("ShopConfig"))
 local Breaking   = require(ReplicatedStorage:WaitForChild("Breaking"))
+local Movement   = require(ReplicatedStorage:WaitForChild("Movement"))
 
 local GEAR = ShopConfig.Gear
 
@@ -65,12 +66,10 @@ local function wireBodyCoil(tool: Tool, spec)
 		-- through the player rather than the tool
 		local player = Players:GetPlayerFromCharacter(tool.Parent)
 			or Players:FindFirstChild(tool:GetAttribute("Owner") :: string or "")
-		local character = player and player.Character
-		local humanoid = character and character:FindFirstChildOfClass("Humanoid")
-		if not humanoid then return end
-		humanoid.WalkSpeed = 16
-		humanoid.UseJumpPower = true
-		humanoid.JumpPower = 50
+		if not player then return end
+		-- back to normal *for right now*, which during a Sprinters event
+		-- is not 16
+		Movement.reset(player)
 	end)
 end
 

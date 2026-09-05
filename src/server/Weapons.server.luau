@@ -17,6 +17,7 @@ local TweenService      = game:GetService("TweenService")
 
 local MarketConfig = require(ReplicatedStorage:WaitForChild("MarketConfig"))
 local Breaking     = require(ReplicatedStorage:WaitForChild("Breaking"))
+local Movement     = require(ReplicatedStorage:WaitForChild("Movement"))
 
 local SPECS = MarketConfig.Specs
 local cooldowns: { [Player]: { [string]: number } } = {}
@@ -419,11 +420,7 @@ local function buildItem(player: Player, key: string): Tool?
 			end
 		end)
 		tool.Unequipped:Connect(function()
-			local character = player.Character
-			local humanoid = character and character:FindFirstChildOfClass("Humanoid")
-			if humanoid then
-				humanoid.WalkSpeed = 16
-			end
+			Movement.reset(player)
 		end)
 		return tool
 	end
