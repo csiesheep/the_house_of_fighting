@@ -2,9 +2,12 @@
 -- ===========================================================
 --  THE HOUSE OF FIGHTING -- client HUD
 --
---  Title card, bricks smashed, and your coin balance. Both
---  counters are read straight off leaderstats, so the server
---  stays the only thing that can change them.
+--  Bricks smashed and your coin balance, tucked into the top
+--  left corner. It used to sit centred at the top, which is
+--  exactly where you are looking when you swing at a wall.
+--
+--  Both counters are read straight off leaderstats, so the
+--  server stays the only thing that can change them.
 -- ===========================================================
 
 local Players           = game:GetService("Players")
@@ -17,7 +20,6 @@ local player = Players.LocalPlayer
 
 local INK   = Theme.Ink
 local MUTED = Theme.Muted
-local PANEL = Theme.Panel
 local GOLD  = Color3.fromRGB(198, 146, 26)
 
 local gui = Instance.new("ScreenGui")
@@ -27,72 +29,66 @@ gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 gui.Parent = player:WaitForChild("PlayerGui")
 
 local card = Instance.new("Frame")
-card.Size = UDim2.new(0, 300, 0, 128)
-card.Position = UDim2.new(0.5, -150, 0, 14)
-card.BackgroundColor3 = PANEL
-card.BackgroundTransparency = Theme.PanelTransparency
+card.Name = "Stats"
+card.Size = UDim2.new(0, 168, 0, 92)
+card.Position = UDim2.new(0, 14, 0, 14)
+card.BackgroundColor3 = Theme.Panel
+card.BackgroundTransparency = 0.18
 card.Parent = gui
 
 local corner = Instance.new("UICorner")
-corner.CornerRadius = UDim.new(0, 12)
+corner.CornerRadius = UDim.new(0, 10)
 corner.Parent = card
 
-local title = Instance.new("TextLabel")
-title.Size = UDim2.new(1, 0, 0, 26)
-title.Position = UDim2.new(0, 0, 0, 8)
-title.BackgroundTransparency = 1
-title.TextColor3 = INK
-title.Font = Enum.Font.GothamBlack
-title.TextSize = 18
-title.Text = "THE HOUSE OF FIGHTING"
-title.Parent = card
-
-local status = Instance.new("TextLabel")
-status.Size = UDim2.new(1, 0, 0, 16)
-status.Position = UDim2.new(0, 0, 0, 34)
-status.BackgroundTransparency = 1
-status.TextColor3 = MUTED
-status.Font = Enum.Font.GothamMedium
-status.TextSize = 12
-status.Text = "1 in the house"
-status.Parent = card
+local padding = Instance.new("UIPadding")
+padding.PaddingLeft = UDim.new(0, 12)
+padding.PaddingRight = UDim.new(0, 12)
+padding.PaddingTop = UDim.new(0, 10)
+padding.Parent = card
 
 -- -----------------------------------------------------------
---  Two counters, side by side
+--  One row per stat: caption left, number right
 -- -----------------------------------------------------------
 
-local function makeStat(x: number, caption: string, colour: Color3): TextLabel
-	local holder = Instance.new("Frame")
-	holder.Size = UDim2.new(0.5, -12, 0, 60)
-	holder.Position = UDim2.new(x, x == 0 and 10 or 2, 0, 58)
-	holder.BackgroundTransparency = 1
-	holder.Parent = card
-
-	local value = Instance.new("TextLabel")
-	value.Name = "Value"
-	value.Size = UDim2.new(1, 0, 0, 34)
-	value.BackgroundTransparency = 1
-	value.TextColor3 = colour
-	value.Font = Enum.Font.GothamBlack
-	value.TextSize = 27
-	value.Text = "0"
-	value.Parent = holder
-
+local function makeRow(y: number, caption: string, colour: Color3): TextLabel
 	local tag = Instance.new("TextLabel")
-	tag.Size = UDim2.new(1, 0, 0, 16)
-	tag.Position = UDim2.new(0, 0, 0, 34)
+	tag.Size = UDim2.new(0.5, 0, 0, 22)
+	tag.Position = UDim2.new(0, 0, 0, y)
 	tag.BackgroundTransparency = 1
 	tag.TextColor3 = MUTED
 	tag.Font = Enum.Font.GothamMedium
 	tag.TextSize = 12
+	tag.TextXAlignment = Enum.TextXAlignment.Left
 	tag.Text = caption
-	tag.Parent = holder
+	tag.Parent = card
+
+	local value = Instance.new("TextLabel")
+	value.Size = UDim2.new(0.5, 0, 0, 22)
+	value.Position = UDim2.new(0.5, 0, 0, y)
+	value.BackgroundTransparency = 1
+	value.TextColor3 = colour
+	value.Font = Enum.Font.GothamBlack
+	value.TextSize = 19
+	value.TextXAlignment = Enum.TextXAlignment.Right
+	value.Text = "0"
+	value.Parent = card
 
 	return value
 end
 
-local bricksLabel = makeStat(0, "BRICKS", INK)
-local coinsLabel  = makeStat(0.5, "COINS", GOLD)
+local coinsLabel  = makeRow(0, "COINS", GOLD)
+local bricksLabel = makeRow(26, "BRICKS", INK)
+
+local status = Instance.new("TextLabel")
+status.Size = UDim2.new(1, 0, 0, 16)
+status.Position = UDim2.new(0, 0, 0, 54)
+status.BackgroundTransparency = 1
+status.TextColor3 = MUTED
+status.Font = Enum.Font.Gotham
+status.TextSize = 11
+status.TextXAlignment = Enum.TextXAlignment.Left
+status.Text = "1 in the house"
+status.Parent = card
 
 local function refreshPlayers()
 	local count = #Players:GetPlayers()
@@ -132,11 +128,11 @@ local function track(name: string, label: TextLabel, rest: Color3)
 		value.Changed:Connect(function()
 			show()
 			label.TextColor3 = Theme.Flash
-			TweenService:Create(label, TweenInfo.new(0.45), { TextColor3 = rest }):Play()
+			TweenService:Create(label, TweenInfo.new(0.4), { TextColor3 = rest }):Play()
 		end)
 		show()
 	end)
 end
 
-track("Bricks", bricksLabel, INK)
 track("Coins", coinsLabel, GOLD)
+track("Bricks", bricksLabel, INK)

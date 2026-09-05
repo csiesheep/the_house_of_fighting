@@ -137,12 +137,42 @@ local function save(player: Player)
 	end)
 end
 
-Players.PlayerAdded:Connect(setup)
+-- Coins move in big jumps now (5 a brick, 10 an obby, thousands at the
+-- market), so waiting up to two minutes to write risks losing a real
+-- amount. Save shortly after a change instead, debounced so a
+-- demolition does not fire off hundreds of writes.
+local savePending: { [Player]: boolean } = {}
+
+local function saveSoon(player: Player)
+	if savePending[player] then
+		return
+	end
+	savePending[player] = true
+
+	task.delay(6, function()
+		savePending[player] = nil
+		if player.Parent then
+			save(player)
+		end
+	end)
+end
+
+Players.PlayerAdded:Connect(function(player)
+	setup(player)
+
+	local coins = coinsOf[player]
+	if coins then
+		coins.Changed:Connect(function()
+			saveSoon(player)
+		end)
+	end
+end)
 
 Players.PlayerRemoving:Connect(function(player)
 	save(player)
 	bricksOf[player] = nil
 	coinsOf[player] = nil
+	savePending[player] = nil
 	loaded[player] = nil
 end)
 

@@ -225,7 +225,20 @@ end
 
 local thrusters: { [Player]: { attachment: Attachment, force: LinearVelocity } } = {}
 
-local function stopThrust(player: Player)
+local function setFlames(tool: Tool?, on: boolean)
+	if not tool then
+		return
+	end
+	for _, piece in ipairs(tool:GetChildren()) do
+		if piece:IsA("BasePart") and piece.Name == "Flame" then
+			piece.Transparency = on and 0.2 or 1
+		end
+	end
+end
+
+local function stopThrust(player: Player, tool: Tool?)
+	setFlames(tool, false)
+
 	local rig = thrusters[player]
 	if not rig then
 		return
@@ -235,13 +248,14 @@ local function stopThrust(player: Player)
 	if rig.attachment then rig.attachment:Destroy() end
 end
 
-local function startThrust(player: Player)
+local function startThrust(player: Player, tool: Tool?)
 	local spec = SPECS.Jetpack
 	local root = rootOf(player)
 	if not root then
 		return
 	end
-	stopThrust(player)
+	stopThrust(player, tool)
+	setFlames(tool, true)
 
 	local attachment = Instance.new("Attachment")
 	attachment.Parent = root
@@ -264,8 +278,16 @@ end
 --  Tools
 -- ===========================================================
 
-local function basicTool(name: string, size: Vector3, colour: Color3, material: Enum.Material,
-	tip: string): Tool
+-- ===========================================================
+--  Skins
+--
+--  Every item is a small welded model rather than one coloured
+--  block, so you can tell what you are holding at a glance and
+--  so other players can tell what is about to hit them.
+-- ===========================================================
+
+local function newTool(name: string, tip: string, handleSize: Vector3,
+	colour: Color3, material: Enum.Material): (Tool, Part)
 	local tool = Instance.new("Tool")
 	tool.Name = name
 	tool.RequiresHandle = true
@@ -274,14 +296,46 @@ local function basicTool(name: string, size: Vector3, colour: Color3, material: 
 
 	local handle = Instance.new("Part")
 	handle.Name = "Handle"
-	handle.Size = size
+	handle.Size = handleSize
 	handle.Color = colour
 	handle.Material = material
 	handle.CanCollide = false
+	handle.TopSurface = Enum.SurfaceType.Smooth
+	handle.BottomSurface = Enum.SurfaceType.Smooth
 	handle.Parent = tool
 
-	return tool
+	return tool, handle
 end
+
+-- A welded extra piece, positioned relative to the handle.
+local function addPiece(tool: Tool, handle: Part, name: string, size: Vector3,
+	offset: CFrame, colour: Color3, material: Enum.Material, shape: Enum.PartType?): Part
+	local piece = Instance.new("Part")
+	piece.Name = name
+	piece.Size = size
+	piece.Color = colour
+	piece.Material = material
+	piece.CanCollide = false
+	piece.Massless = true
+	piece.TopSurface = Enum.SurfaceType.Smooth
+	piece.BottomSurface = Enum.SurfaceType.Smooth
+	if shape then
+		piece.Shape = shape
+	end
+	piece.CFrame = handle.CFrame * offset
+	piece.Parent = tool
+
+	local weld = Instance.new("WeldConstraint")
+	weld.Part0 = handle
+	weld.Part1 = piece
+	weld.Parent = handle
+
+	return piece
+end
+
+local STEEL   = Color3.fromRGB(198, 204, 214)
+local DARK    = Color3.fromRGB(46, 44, 50)
+local LEATHER = Color3.fromRGB(72, 52, 40)
 
 local function buildItem(player: Player, key: string): Tool?
 	local spec = SPECS[key]
@@ -289,28 +343,74 @@ local function buildItem(player: Player, key: string): Tool?
 		return nil
 	end
 
+	-- ---- Knife: grip, guard, tapered blade -------------------------
 	if key == "Knife" then
-		local tool = basicTool(spec.toolName, Vector3.new(0.35, 3.2, 0.9), spec.colour,
-			Enum.Material.Metal, "Stab whoever is in front of you")
-		tool.Grip = CFrame.new(0, -1.1, 0)
+		local tool, handle = newTool(spec.toolName, "Stab whoever is in front of you",
+			Vector3.new(0.32, 1.5, 0.5), LEATHER, Enum.Material.Fabric)
+
+		addPiece(tool, handle, "Pommel", Vector3.new(0.5, 0.25, 0.6),
+			CFrame.new(0, -0.85, 0), DARK, Enum.Material.Metal)
+		addPiece(tool, handle, "Guard", Vector3.new(1.1, 0.22, 0.7),
+			CFrame.new(0, 0.8, 0), DARK, Enum.Material.Metal)
+		addPiece(tool, handle, "Blade", Vector3.new(0.16, 2.4, 0.62),
+			CFrame.new(0, 2.05, 0), STEEL, Enum.Material.Metal)
+		addPiece(tool, handle, "Point", Vector3.new(0.14, 0.5, 0.3),
+			CFrame.new(0, 3.4, 0.12), STEEL, Enum.Material.Metal)
+
+		tool.Grip = CFrame.new(0, 0, 0)
 		tool.Activated:Connect(function()
 			stab(player)
 		end)
 		return tool
 	end
 
+	-- ---- Dynamite: bundled sticks, tape, a lit fuse ----------------
 	if key == "Dynamite" then
-		local tool = basicTool(spec.toolName, Vector3.new(1.2, 3, 1.2), spec.colour,
-			Enum.Material.Neon, "Throw it and back off")
+		local tool, handle = newTool(spec.toolName, "Throw it and back off",
+			Vector3.new(0.8, 2.4, 0.8), spec.colour, Enum.Material.Slate)
+
+		addPiece(tool, handle, "Stick", Vector3.new(0.8, 2.4, 0.8),
+			CFrame.new(0.75, -0.15, 0.1), spec.colour, Enum.Material.Slate)
+		addPiece(tool, handle, "Stick", Vector3.new(0.8, 2.4, 0.8),
+			CFrame.new(0.38, 0.1, -0.65), spec.colour, Enum.Material.Slate)
+		addPiece(tool, handle, "Tape", Vector3.new(2.1, 0.45, 1.9),
+			CFrame.new(0.38, 0.35, -0.2), Color3.fromRGB(44, 40, 38), Enum.Material.Fabric)
+		addPiece(tool, handle, "Fuse", Vector3.new(0.14, 0.9, 0.14),
+			CFrame.new(0, 1.55, 0), Color3.fromRGB(180, 168, 140), Enum.Material.Fabric)
+
+		local spark = addPiece(tool, handle, "Spark", Vector3.new(0.35, 0.35, 0.35),
+			CFrame.new(0, 2.05, 0), Color3.fromRGB(255, 214, 120),
+			Enum.Material.Neon, Enum.PartType.Ball)
+
+		local glow = Instance.new("PointLight")
+		glow.Color = Color3.fromRGB(255, 190, 90)
+		glow.Range = 8
+		glow.Brightness = 2
+		glow.Parent = spark
+
+		tool.Grip = CFrame.new(0, -0.4, 0)
 		tool.Activated:Connect(function()
 			throwDynamite(player)
 		end)
 		return tool
 	end
 
+	-- ---- Speed Boots: boot, rubber sole, winged heel ---------------
 	if key == "SpeedBoots" then
-		local tool = basicTool(spec.toolName, Vector3.new(2.2, 1, 3.2), spec.colour,
-			Enum.Material.Fabric, "Hold to run")
+		local tool, handle = newTool(spec.toolName, "Hold to run",
+			Vector3.new(1.5, 1.6, 2.6), LEATHER, Enum.Material.Fabric)
+
+		addPiece(tool, handle, "Sole", Vector3.new(1.7, 0.4, 3),
+			CFrame.new(0, -0.9, 0.1), DARK, Enum.Material.Rubber)
+		addPiece(tool, handle, "Cuff", Vector3.new(1.7, 0.5, 2.2),
+			CFrame.new(0, 0.9, -0.2), spec.colour, Enum.Material.Fabric)
+		for _, side in ipairs({ -1, 1 }) do
+			addPiece(tool, handle, "Wing", Vector3.new(0.2, 1.1, 1.6),
+				CFrame.new(side * 0.85, 0.55, -1) * CFrame.Angles(0, 0, math.rad(side * 22)),
+				spec.colour, Enum.Material.Neon)
+		end
+
+		tool.Grip = CFrame.new(0, -0.6, 0)
 		tool.Equipped:Connect(function()
 			local character = player.Character
 			local humanoid = character and character:FindFirstChildOfClass("Humanoid")
@@ -328,26 +428,62 @@ local function buildItem(player: Player, key: string): Tool?
 		return tool
 	end
 
+	-- ---- Grapple Hook: launcher body, barrel, claw -----------------
 	if key == "GrappleHook" then
-		local tool = basicTool(spec.toolName, Vector3.new(1, 2.4, 2.6), spec.colour,
-			Enum.Material.Metal, "Fire at anything in sight")
+		local tool, handle = newTool(spec.toolName, "Fire at anything in sight",
+			Vector3.new(0.8, 1.8, 1.2), DARK, Enum.Material.Metal)
+
+		addPiece(tool, handle, "Body", Vector3.new(1, 1, 2.6),
+			CFrame.new(0, 1.1, -0.4), Color3.fromRGB(70, 74, 84), Enum.Material.Metal)
+		addPiece(tool, handle, "Barrel", Vector3.new(0.55, 0.55, 2.2),
+			CFrame.new(0, 1.1, -2), STEEL, Enum.Material.Metal)
+		addPiece(tool, handle, "Drum", Vector3.new(1.5, 1.5, 0.7),
+			CFrame.new(0, 1.1, 0.7) * CFrame.Angles(0, math.rad(90), 0),
+			spec.colour, Enum.Material.Neon, Enum.PartType.Cylinder)
+		for _, side in ipairs({ -1, 1 }) do
+			addPiece(tool, handle, "Claw", Vector3.new(0.18, 0.9, 0.5),
+				CFrame.new(side * 0.35, 1.1, -3.1)
+					* CFrame.Angles(math.rad(20), 0, math.rad(side * 25)),
+				STEEL, Enum.Material.Metal)
+		end
+
+		tool.Grip = CFrame.new(0, -0.5, 0)
 		tool.Activated:Connect(function()
 			grapple(player)
 		end)
 		return tool
 	end
 
+	-- ---- Jetpack: twin tanks, nozzles, flame while thrusting -------
 	if key == "Jetpack" then
-		local tool = basicTool(spec.toolName, Vector3.new(2.4, 3.2, 1.4), spec.colour,
-			Enum.Material.Metal, "Hold to climb")
+		local tool, handle = newTool(spec.toolName, "Hold to climb",
+			Vector3.new(2.6, 2.8, 0.6), Color3.fromRGB(88, 92, 104), Enum.Material.Metal)
+
+		for _, side in ipairs({ -1, 1 }) do
+			addPiece(tool, handle, "Tank", Vector3.new(2.4, 1.1, 1.1),
+				CFrame.new(side * 0.85, 0.2, 0.9) * CFrame.Angles(0, 0, math.rad(90)),
+				spec.colour, Enum.Material.Metal, Enum.PartType.Cylinder)
+			addPiece(tool, handle, "Nozzle", Vector3.new(0.7, 0.7, 0.7),
+				CFrame.new(side * 0.85, -1.5, 0.9), DARK, Enum.Material.Metal)
+
+			local flame = addPiece(tool, handle, "Flame", Vector3.new(0.6, 1.8, 0.6),
+				CFrame.new(side * 0.85, -2.6, 0.9), Color3.fromRGB(255, 168, 60),
+				Enum.Material.Neon)
+			flame.Transparency = 1
+		end
+
+		addPiece(tool, handle, "Strap", Vector3.new(2.9, 0.4, 0.4),
+			CFrame.new(0, 0.9, -0.2), DARK, Enum.Material.Fabric)
+
+		tool.Grip = CFrame.new(0, 0, 0.9)
 		tool.Activated:Connect(function()
-			startThrust(player)
+			startThrust(player, tool)
 		end)
 		tool.Deactivated:Connect(function()
-			stopThrust(player)
+			stopThrust(player, tool)
 		end)
 		tool.Unequipped:Connect(function()
-			stopThrust(player)
+			stopThrust(player, tool)
 		end)
 		return tool
 	end
@@ -400,7 +536,7 @@ end
 
 Players.PlayerAdded:Connect(function(player)
 	player.CharacterAdded:Connect(function()
-		stopThrust(player)
+		stopThrust(player, nil)
 		task.wait(0.4)   -- after hammer, gear and trowel have settled
 		refresh(player)
 	end)
@@ -419,7 +555,7 @@ Players.PlayerAdded:Connect(function(player)
 end)
 
 Players.PlayerRemoving:Connect(function(player)
-	stopThrust(player)
+	stopThrust(player, nil)
 	cooldowns[player] = nil
 end)
 
