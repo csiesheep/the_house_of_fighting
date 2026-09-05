@@ -35,6 +35,7 @@ do
 end
 
 local bricksOf: { [Player]: IntValue } = {}
+local coinsOf: { [Player]: IntValue } = {}
 local loaded: { [Player]: boolean } = {}
 
 -- ===========================================================
@@ -49,6 +50,10 @@ local function setup(player: Player)
 	bricks.Name = "Bricks"
 	bricks.Parent = stats
 
+	local coins = Instance.new("IntValue")
+	coins.Name = "Coins"
+	coins.Parent = stats
+
 	local built = Instance.new("IntValue")
 	built.Name = "Built"
 	built.Parent = stats
@@ -59,6 +64,7 @@ local function setup(player: Player)
 
 	stats.Parent = player
 	bricksOf[player] = bricks
+	coinsOf[player] = coins
 
 	if not store then
 		loaded[player] = true
@@ -69,10 +75,16 @@ local function setup(player: Player)
 		local ok, saved = pcall(function()
 			return store:GetAsync("player_" .. player.UserId)
 		end)
-		if ok and type(saved) == "number" then
-			-- add rather than assign: they may have smashed something
-			-- in the second or two the load took
-			bricks.Value += saved
+
+		-- add rather than assign: they may have smashed something or
+		-- finished the obby in the second or two the load took
+		if ok then
+			if type(saved) == "number" then
+				bricks.Value += saved            -- old single-number format
+			elseif type(saved) == "table" then
+				bricks.Value += tonumber(saved.bricks) or 0
+				coins.Value += tonumber(saved.coins) or 0
+			end
 		end
 		loaded[player] = true
 	end)
@@ -83,13 +95,14 @@ local function save(player: Player)
 		return   -- never write a score we failed to read; that erases it
 	end
 	local bricks = bricksOf[player]
-	if not bricks then
+	local coins = coinsOf[player]
+	if not (bricks and coins) then
 		return
 	end
 
-	local total = bricks.Value
+	local data = { bricks = bricks.Value, coins = coins.Value }
 	pcall(function()
-		store:SetAsync("player_" .. player.UserId, total)
+		store:SetAsync("player_" .. player.UserId, data)
 	end)
 end
 
@@ -98,6 +111,7 @@ Players.PlayerAdded:Connect(setup)
 Players.PlayerRemoving:Connect(function(player)
 	save(player)
 	bricksOf[player] = nil
+	coinsOf[player] = nil
 	loaded[player] = nil
 end)
 
