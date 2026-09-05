@@ -22,13 +22,27 @@ local SAVE_EVERY = 120   -- seconds
 -- Same defensive pattern as the shop: GetDataStore throws outright
 -- when Studio API access is off, and losing saved scores is much
 -- better than losing the scoreboard.
+--
+-- GetDataStore succeeding proves nothing, though -- it returns fine
+-- with API access off and every read and write then fails. So probe
+-- with a real call, or we print "persistent" while silently losing
+-- every save.
 local store: DataStore? = nil
 do
 	local ok, result = pcall(function()
 		return DataStoreService:GetDataStore("BrickScores")
 	end)
-	if ok then
-		store = result
+
+	if ok and result then
+		local reachable = pcall(function()
+			return result:GetAsync("__probe")
+		end)
+		if reachable then
+			store = result
+		else
+			warn("DataStore not reachable -- scores will not persist. "
+				.. "Turn on Game Settings > Security > Enable Studio Access to API Services.")
+		end
 	else
 		warn("DataStore unavailable -- scores will not persist between sessions.")
 	end
