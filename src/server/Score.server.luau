@@ -15,7 +15,8 @@ local Players          = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local DataStoreService  = game:GetService("DataStoreService")
 
-local Breaking = require(ReplicatedStorage:WaitForChild("Breaking"))
+local Breaking     = require(ReplicatedStorage:WaitForChild("Breaking"))
+local MarketConfig = require(ReplicatedStorage:WaitForChild("MarketConfig"))
 
 local SAVE_EVERY = 120   -- seconds
 
@@ -51,6 +52,10 @@ end
 local bricksOf: { [Player]: IntValue } = {}
 local coinsOf: { [Player]: IntValue } = {}
 local loaded: { [Player]: boolean } = {}
+
+-- Bricks left over toward the next coin. Kept per session rather than
+-- saved: rounding a few bricks away on logout is not worth a field.
+local progress: { [Player]: number } = {}
 
 -- ===========================================================
 --  Joining
@@ -98,6 +103,14 @@ local function setup(player: Player)
 			elseif type(saved) == "table" then
 				bricks.Value += tonumber(saved.bricks) or 0
 				coins.Value += tonumber(saved.coins) or 0
+
+				if type(saved.owned) == "table" then
+					for key, owns in pairs(saved.owned) do
+						if owns == true then
+							player:SetAttribute("Owns_" .. tostring(key), true)
+						end
+					end
+				end
 			end
 		end
 		loaded[player] = true
@@ -114,7 +127,14 @@ local function save(player: Player)
 		return
 	end
 
-	local data = { bricks = bricks.Value, coins = coins.Value }
+	local owned = {}
+	for _, item in ipairs(MarketConfig.Items) do
+		if player:GetAttribute("Owns_" .. item.key) == true then
+			owned[item.key] = true
+		end
+	end
+
+	local data = { bricks = bricks.Value, coins = coins.Value, owned = owned }
 	pcall(function()
 		store:SetAsync("player_" .. player.UserId, data)
 	end)
@@ -126,6 +146,7 @@ Players.PlayerRemoving:Connect(function(player)
 	save(player)
 	bricksOf[player] = nil
 	coinsOf[player] = nil
+	progress[player] = nil
 	loaded[player] = nil
 end)
 
@@ -144,10 +165,28 @@ Breaking.Destroyed:Connect(function(credit: Player?, _brick: BasePart)
 	if not credit then
 		return   -- admin /nuke and anything else uncredited does not score
 	end
+
 	local bricks = bricksOf[credit]
 	if bricks then
 		bricks.Value += 1
 	end
+
+	-- Demolition pays. Without this the only income is the obby, at 10
+	-- coins per ten minutes, which puts the top of the market a
+	-- thousand runs away.
+	local coins = coinsOf[credit]
+	if not coins then
+		return
+	end
+
+	local per = math.max(1, MarketConfig.Economy.BricksPerCoin)
+	local carried = (progress[credit] or 0) + 1
+	if carried >= per then
+		local earned = math.floor(carried / per)
+		coins.Value += earned
+		carried -= earned * per
+	end
+	progress[credit] = carried
 end)
 
 -- ===========================================================
