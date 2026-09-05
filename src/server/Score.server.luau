@@ -53,9 +53,6 @@ local bricksOf: { [Player]: IntValue } = {}
 local coinsOf: { [Player]: IntValue } = {}
 local loaded: { [Player]: boolean } = {}
 
--- Bricks left over toward the next coin. Kept per session rather than
--- saved: rounding a few bricks away on logout is not worth a field.
-local progress: { [Player]: number } = {}
 
 -- ===========================================================
 --  Joining
@@ -146,7 +143,6 @@ Players.PlayerRemoving:Connect(function(player)
 	save(player)
 	bricksOf[player] = nil
 	coinsOf[player] = nil
-	progress[player] = nil
 	loaded[player] = nil
 end)
 
@@ -179,14 +175,7 @@ Breaking.Destroyed:Connect(function(credit: Player?, _brick: BasePart)
 		return
 	end
 
-	local per = math.max(1, MarketConfig.Economy.BricksPerCoin)
-	local carried = (progress[credit] or 0) + 1
-	if carried >= per then
-		local earned = math.floor(carried / per)
-		coins.Value += earned
-		carried -= earned * per
-	end
-	progress[credit] = carried
+	coins.Value += math.max(0, MarketConfig.Economy.CoinsPerBrick)
 end)
 
 -- ===========================================================

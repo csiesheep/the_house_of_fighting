@@ -188,5 +188,5 @@ Players.PlayerAdded:Connect(function(player)
 	end
 end)
 
-print(("Market open: %d items, %d bricks per coin")
-	:format(#MarketConfig.Items, MarketConfig.Economy.BricksPerCoin))
+print(("Market open: %d items, %d coins per brick")
+	:format(#MarketConfig.Items, MarketConfig.Economy.CoinsPerBrick))

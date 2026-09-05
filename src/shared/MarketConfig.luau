@@ -9,10 +9,14 @@
 
 local MarketConfig = {}
 
--- How demolition pays. Without this the only income is 10 coins per
--- obby run, which makes a 10,000 coin jetpack a thousand runs.
+-- How demolition pays. This is the main source of coins; the obby is
+-- a small top-up on a timer.
+--
+-- At 5 a brick the whole market is affordable inside a single full
+-- demolition. Lower this, or raise the prices below, if you want the
+-- jetpack to stay something to work toward.
 MarketConfig.Economy = {
-	BricksPerCoin = 4,     -- smash four bricks, earn a coin
+	CoinsPerBrick = 5,
 }
 
 MarketConfig.Stall = {
