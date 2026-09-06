@@ -21,6 +21,7 @@ local BRICK  = CityConfig.Brick
 local RULES  = CityConfig.TowerRules
 local STREET = CityConfig.Street
 local TREE   = CityConfig.Tree
+local STREET_TREE = CityConfig.StreetTree
 local CAR    = CityConfig.Car
 local TAG    = HouseConfig.BreakableTag
 
@@ -359,6 +360,40 @@ function CityBuild.tree(parent: Instance, base: Vector3, rng: Random): Model
 		local spread = 13 - (layer - 1) * 3
 		local leaf = makePart(model, "Leaves", Vector3.new(spread, 5, spread),
 			CFrame.new(base + Vector3.new(0, TREE.TrunkHeight - 1 + (layer - 1) * 3.4, 0)) * lean,
+			TREE.Leaves[rng:NextInteger(1, #TREE.Leaves)], Enum.Material.Grass)
+		leaf.CanCollide = false
+		CollectionService:AddTag(leaf, "Choppable")
+	end
+
+	model.PrimaryPart = trunk
+	model.Parent = parent
+	return model
+end
+
+-- A smaller tree for the pavements, in a soil bed. Same Choppable tag
+-- as a park tree, so the axe treats them identically.
+function CityBuild.streetTree(parent: Instance, base: Vector3, rng: Random): Model
+	local spec = STREET_TREE
+	local model = Instance.new("Model")
+	model.Name = "StreetTree"
+
+	makePart(model, "Bed", Vector3.new(spec.BedSize, 0.8, spec.BedSize),
+		CFrame.new(base + Vector3.new(0, 0.4, 0)),
+		spec.Bed, Enum.Material.Ground, STREET.Health)
+
+	local lean = CFrame.Angles(0, math.rad(rng:NextNumber(0, 360)), 0)
+
+	local trunk = makePart(model, "Trunk",
+		Vector3.new(spec.TrunkWidth, spec.TrunkHeight, spec.TrunkWidth),
+		CFrame.new(base + Vector3.new(0, spec.TrunkHeight / 2, 0)) * lean,
+		TREE.Trunk, Enum.Material.Wood)
+	CollectionService:AddTag(trunk, "Choppable")
+
+	for layer = 1, spec.CanopyLayers do
+		local spread = spec.CanopySpread - (layer - 1) * 2
+		local leaf = makePart(model, "Leaves", Vector3.new(spread, 4, spread),
+			CFrame.new(base + Vector3.new(0, spec.TrunkHeight - 0.5 + (layer - 1) * 2.6, 0))
+				* lean,
 			TREE.Leaves[rng:NextInteger(1, #TREE.Leaves)], Enum.Material.Grass)
 		leaf.CanCollide = false
 		CollectionService:AddTag(leaf, "Choppable")

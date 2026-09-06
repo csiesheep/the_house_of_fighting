@@ -77,6 +77,7 @@ local baseOf: { [BasePart]: Tower } = {}
 type Tree = { model: Model, health: number, felled: boolean }
 local trees: { [BasePart]: Tree } = {}
 
+
 local function blockCentre(index: number, count: number): number
 	local half = (count * GRID.BlockSize + (count + 1) * GRID.RoadWidth) / 2
 	return -half + GRID.RoadWidth + (index - 1) * (GRID.BlockSize + GRID.RoadWidth)
@@ -90,13 +91,15 @@ end
 --  the road, which is what turns a grid of boxes into streets.
 -- ===========================================================
 
-local function edgePoints(centre: Vector3, count: number, inset: number)
+local function edgePoints(centre: Vector3, count: number, inset: number, phase: number?)
 	local half = GRID.BlockSize / 2 - inset
 	local points = {}
 
 	for i = 1, count do
-		-- walk the perimeter, spreading evenly around all four sides
-		local t = ((i - 0.5) / count) * 4
+		-- walk the perimeter, spreading evenly around all four sides.
+		-- phase rotates the whole set, so lamps and trees interleave
+		-- instead of landing on top of each other.
+		local t = (((i - 0.5) / count) + (phase or 0)) % 1 * 4
 		local side = math.floor(t)
 		local along = (t - side) * 2 - 1     -- -1 .. 1 along that side
 
@@ -121,15 +124,41 @@ local function dressBlock(folder: Instance, centre: Vector3)
 	for _, spot in ipairs(edgePoints(centre, STREET.LampsPerBlock, STREET.Inset)) do
 		CityBuild.lamp(folder, spot.position, spot.facing + math.pi)
 	end
-	for _, spot in ipairs(edgePoints(centre, STREET.PlantersPerBlock, STREET.Inset + 4)) do
+
+	-- offset from the lamps so the pavement alternates lamp, tree, lamp
+	for _, spot in ipairs(edgePoints(centre, STREET.TreesPerBlock, STREET.Inset, 0.17)) do
+		local model = CityBuild.streetTree(folder, spot.position, rng)
+		local record: Tree = {
+			model = model, health = CityConfig.StreetTree.Health, felled = false,
+		}
+		for _, part in ipairs(model:GetDescendants()) do
+			if part:IsA("BasePart") then
+				trees[part] = record
+			end
+		end
+	end
+
+	for _, spot in ipairs(edgePoints(centre, STREET.PlantersPerBlock, STREET.Inset + 1, 0.4)) do
 		CityBuild.planter(folder, spot.position, rng)
 	end
-	for _, spot in ipairs(edgePoints(centre, STREET.BenchesPerBlock, STREET.Inset + 3)) do
+	for _, spot in ipairs(edgePoints(centre, STREET.BenchesPerBlock, STREET.Inset + 2, 0.6)) do
 		CityBuild.bench(folder, spot.position, spot.facing)
 	end
-	for _, spot in ipairs(edgePoints(centre, STREET.BinsPerBlock, STREET.Inset + 2)) do
+	for _, spot in ipairs(edgePoints(centre, STREET.BinsPerBlock, STREET.Inset + 2, 0.85)) do
 		CityBuild.bin(folder, spot.position)
 	end
+end
+
+-- The surface the building itself stands on, inside the sidewalk ring.
+-- Grass under the parks, concrete everywhere else.
+local function buildBlockPad(folder: Instance, centre: Vector3, kind: string)
+	local WALK = CityConfig.Sidewalk
+	local inner = GRID.BlockSize - (WALK.Width + WALK.KerbWidth) * 2
+
+	CityBuild.makePart(folder, "Lot", Vector3.new(inner, 1.6, inner),
+		CFrame.new(centre + Vector3.new(0, WALK.PadRise - 0.8, 0)),
+		kind == "P" and WALK.Grass or WALK.Pad,
+		kind == "P" and Enum.Material.Grass or Enum.Material.Concrete)
 end
 
 -- ===========================================================
@@ -348,7 +377,9 @@ local function buildCity()
 				counts.C += 1
 			end
 
-			-- every block gets a pavement, market and empty lots included
+			-- every block gets its pad and its pavement dressing, the
+			-- market and any empty lots included
+			buildBlockPad(folder, centre, kind)
 			dressBlock(folder, centre)
 		end
 	end

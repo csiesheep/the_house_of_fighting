@@ -28,9 +28,25 @@ CityConfig.Grid = {
 CityConfig.Layout = {
 	"T H S C T",
 	"P S T S H",
-	"T . M . T",
+	"T S M S T",
 	"H S T S P",
 	"T C S H T",
+}
+
+-- Every block is a pavement ring around whatever stands on it: kerb
+-- at the road edge, walkable sidewalk, then the building's own pad.
+CityConfig.Sidewalk = {
+	Width      = 8,     -- of the walkable ring
+	KerbWidth  = 2,
+	KerbRise   = 0.9,   -- above the road surface
+	WalkRise   = 0.6,
+	PadRise    = 0.75,  -- the inner pad the building sits on
+
+	Kerb     = Color3.fromRGB(206, 204, 198),
+	Walk     = Color3.fromRGB(180, 178, 172),
+	WalkAlt  = Color3.fromRGB(170, 168, 162),
+	Pad      = Color3.fromRGB(158, 156, 150),
+	Grass    = Color3.fromRGB(112, 156, 92),
 }
 
 CityConfig.Brick = {
@@ -127,7 +143,7 @@ CityConfig.SkyscraperStyles = {
 	},
 	{
 		name = "Corporate Slab",
-		widthBricks = 7, depthBricks = 5, courses = 18, brickScale = 2,
+		widthBricks = 6, depthBricks = 5, courses = 18, brickScale = 2,
 		windows = "grid", roof = "parapet",
 		wall = Color3.fromRGB(160, 152, 140),
 		accent = Color3.fromRGB(96, 92, 88),
@@ -139,11 +155,12 @@ CityConfig.SkyscraperStyles = {
 -- ===========================================================
 
 CityConfig.Street = {
-	LampsPerBlock    = 3,
+	LampsPerBlock    = 2,
+	TreesPerBlock    = 3,     -- planted along the sidewalk itself
 	PlantersPerBlock = 2,
-	BenchesPerBlock  = 2,
+	BenchesPerBlock  = 1,
 	BinsPerBlock     = 1,
-	Inset            = 3,     -- from the block edge onto the pavement
+	Inset            = 4,     -- from the block edge onto the pavement
 	Health           = 1,     -- one hammer blow; they are dressing, not walls
 
 	Lamp = {
@@ -173,6 +190,19 @@ CityConfig.Street = {
 		Height = 16,
 		ArmLength = 9,
 	},
+}
+
+-- The smaller ones lining the pavements. A park tree on a sidewalk
+-- would put its canopy over two lanes of traffic.
+CityConfig.StreetTree = {
+	TrunkHeight = 11,
+	TrunkWidth = 1.6,
+	CanopyLayers = 2,
+	CanopySpread = 8,
+	Health = 3,
+	Reward = 8,
+	BedSize = 4.5,
+	Bed = Color3.fromRGB(74, 56, 42),
 }
 
 CityConfig.Tree = {

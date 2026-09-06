@@ -67,15 +67,31 @@ local function blockCentre(index: number, count: number): number
 		+ GRID.BlockSize / 2
 end
 
--- Block pads sit proud of the road, so the grid reads as pavement and
--- tarmac rather than one flat colour.
-local function buildBlockPads()
+-- Each block gets a kerb at the road edge and a walkable sidewalk
+-- inside it. The building's own pad is City.server's business, since
+-- only it knows whether the block is a tower or a park.
+local function buildSidewalks()
+	local WALK = CityConfig.Sidewalk
+	local size = GRID.BlockSize
+
 	for col = 1, GRID.Cols do
 		for row = 1, GRID.Rows do
-			makePart("Pavement", Vector3.new(GRID.BlockSize, 1.2, GRID.BlockSize),
-				CFrame.new(ORIGIN + Vector3.new(
-					blockCentre(col, GRID.Cols), -0.4, blockCentre(row, GRID.Rows))),
-				StageConfig.Palette.Pavement, Enum.Material.Concrete)
+			local centre = ORIGIN + Vector3.new(
+				blockCentre(col, GRID.Cols), 0, blockCentre(row, GRID.Rows))
+
+			-- the kerb: a raised lip the full footprint, which the
+			-- sidewalk then sits inside
+			makePart("Kerb", Vector3.new(size, 1.6, size),
+				CFrame.new(centre + Vector3.new(0, WALK.KerbRise - 0.8, 0)),
+				WALK.Kerb, Enum.Material.Concrete)
+
+			-- the walkable surface, inset by the kerb width. Chequered
+			-- so it reads as paving slabs rather than one grey sheet.
+			local inner = size - WALK.KerbWidth * 2
+			makePart("Sidewalk", Vector3.new(inner, 1.6, inner),
+				CFrame.new(centre + Vector3.new(0, WALK.WalkRise - 0.8, 0)),
+				(col + row) % 2 == 0 and WALK.Walk or WALK.WalkAlt,
+				Enum.Material.Concrete)
 		end
 	end
 end
@@ -182,7 +198,7 @@ local function buildSpawns()
 end
 
 buildGround()
-buildBlockPads()
+buildSidewalks()
 buildRoadMarkings()
 buildBoundary()
 buildSpawns()
