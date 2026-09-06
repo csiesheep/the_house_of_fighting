@@ -2,13 +2,12 @@
 -- ===========================================================
 --  THE HOUSE OF FIGHTING -- the city
 --
---  Fills the block grid: towers, houses, parks of choppable
---  trees, and car parks. Replaces the old ring of houses.
+--  Decides what stands where, watches towers for collapse, and
+--  rebuilds the place when it has all come down.
 --
---  Towers are the interesting one. Take enough of the ground
---  floor out and the whole thing comes down on its own,
---  because a shell standing on nothing should not keep
---  standing.
+--  The parts themselves are CityBuild's job. This script had
+--  grown into layout, geometry, collapse tracking and
+--  scheduling all at once, so the geometry moved out.
 -- ===========================================================
 
 local Players           = game:GetService("Players")
@@ -21,14 +20,16 @@ local CityConfig   = require(ReplicatedStorage:WaitForChild("CityConfig"))
 local StageConfig  = require(ReplicatedStorage:WaitForChild("StageConfig"))
 local HouseConfig  = require(ReplicatedStorage:WaitForChild("HouseConfig"))
 local Breaking     = require(ReplicatedStorage:WaitForChild("Breaking"))
+local CityBuild    = require(script.Parent.CityBuild)
 local HouseStyles  = require(script.Parent.HouseStyles)
 local HouseBuilder = require(script.Parent.HouseBuilder)
 
 local GRID   = CityConfig.Grid
-local TOWER  = CityConfig.Tower
+local RULES  = CityConfig.Rules
+local TOWER  = CityConfig.TowerRules
+local STREET = CityConfig.Street
 local TREE   = CityConfig.Tree
 local CAR    = CityConfig.Car
-local RULES  = CityConfig.Rules
 local ORIGIN = StageConfig.Bounds.Origin
 local TAG    = HouseConfig.BreakableTag
 
@@ -53,7 +54,7 @@ requestSwitch.Parent = remotes
 remotes.Parent = ReplicatedStorage
 
 -- ===========================================================
---  Helpers
+--  State
 -- ===========================================================
 
 local city: Folder? = nil
@@ -62,7 +63,6 @@ local switchReadyAt = 0
 
 type Tower = {
 	folder: Folder,
-	base: { [BasePart]: boolean },
 	baseTotal: number,
 	baseLeft: number,
 	collapsed: boolean,
@@ -81,199 +81,53 @@ local function blockCentre(index: number, count: number): number
 		+ GRID.BlockSize / 2
 end
 
-local function makeBrick(parent: Instance, name: string, size: Vector3, cframe: CFrame,
-	colour: Color3, material: Enum.Material, health: number?, transparency: number?): Part
-	local part = Instance.new("Part")
-	part.Name = name
-	part.Anchored = true
-	part.Size = size
-	part.CFrame = cframe
-	part.Color = colour
-	part.Material = material
-	part.Transparency = transparency or 0
-	part.TopSurface = Enum.SurfaceType.Smooth
-	part.BottomSurface = Enum.SurfaceType.Smooth
-	part.Parent = parent
+-- ===========================================================
+--  Street dressing
+--
+--  Furniture goes on the pavement edge of every block, facing
+--  the road, which is what turns a grid of boxes into streets.
+-- ===========================================================
 
-	if health then
-		part:SetAttribute("Health", health)
-		part:SetAttribute("MaxHealth", health)
-		CollectionService:AddTag(part, TAG)
+local function edgePoints(centre: Vector3, count: number, inset: number)
+	local half = GRID.BlockSize / 2 - inset
+	local points = {}
+
+	for i = 1, count do
+		-- walk the perimeter, spreading evenly around all four sides
+		local t = ((i - 0.5) / count) * 4
+		local side = math.floor(t)
+		local along = (t - side) * 2 - 1     -- -1 .. 1 along that side
+
+		local offset, facing
+		if side == 0 then
+			offset, facing = Vector3.new(along * half, 0, -half), 0
+		elseif side == 1 then
+			offset, facing = Vector3.new(half, 0, along * half), math.pi / 2
+		elseif side == 2 then
+			offset, facing = Vector3.new(-along * half, 0, half), math.pi
+		else
+			offset, facing = Vector3.new(-half, 0, -along * half), -math.pi / 2
+		end
+
+		table.insert(points, { position = centre + offset, facing = facing })
 	end
-	return part
+
+	return points
 end
 
--- ===========================================================
---  Towers
--- ===========================================================
-
-local function buildTower(parent: Instance, centre: Vector3)
-	local folder = Instance.new("Folder")
-	folder.Name = "Tower"
-
-	local brick = TOWER.BrickSize
-	local width = TOWER.WidthBricks * brick.X
-	local depth = TOWER.DepthBricks * brick.X
-	local shade = TOWER.Palette[rng:NextInteger(1, #TOWER.Palette)]
-
-	local record: Tower = {
-		folder = folder, base = {}, baseTotal = 0, baseLeft = 0,
-		collapsed = false, centre = centre,
-	}
-
-	for course = 1, TOWER.Courses do
-		local y = (course - 0.5) * brick.Y
-		local isGlass = course % TOWER.GlassEvery == 0
-		local colour = isGlass and TOWER.Glass or shade
-		local material = isGlass and Enum.Material.Glass or Enum.Material.Concrete
-		local transparency = isGlass and 0.4 or 0
-
-		-- shell only: walls, no floors. A solid tower would be 25 times
-		-- the parts for an inside nobody sees.
-		for side = -1, 1, 2 do
-			for col = 1, TOWER.WidthBricks do
-				local x = -width / 2 + (col - 0.5) * brick.X
-				local part = makeBrick(folder, "Brick", brick,
-					CFrame.new(centre + Vector3.new(x, y, side * depth / 2)),
-					colour, material, TOWER.BrickHealth, transparency)
-				if course <= TOWER.BaseCourses then
-					record.base[part] = true
-					record.baseTotal += 1
-				end
-			end
-
-			for row = 1, TOWER.DepthBricks do
-				local z = -depth / 2 + (row - 0.5) * brick.X
-				local part = makeBrick(folder, "Brick",
-					Vector3.new(brick.Z, brick.Y, brick.X),
-					CFrame.new(centre + Vector3.new(side * width / 2, y, z)),
-					colour, material, TOWER.BrickHealth, transparency)
-				if course <= TOWER.BaseCourses then
-					record.base[part] = true
-					record.baseTotal += 1
-				end
-			end
-		end
+local function dressBlock(folder: Instance, centre: Vector3)
+	for _, spot in ipairs(edgePoints(centre, STREET.LampsPerBlock, STREET.Inset)) do
+		CityBuild.lamp(folder, spot.position, spot.facing + math.pi)
 	end
-
-	-- a flat roof, so it reads as a building rather than a chimney
-	makeBrick(folder, "Roof",
-		Vector3.new(width + 2, brick.Y, depth + 2),
-		CFrame.new(centre + Vector3.new(0, TOWER.Courses * brick.Y + brick.Y / 2, 0)),
-		shade:Lerp(Color3.new(0, 0, 0), 0.3), Enum.Material.Concrete, TOWER.BrickHealth)
-
-	record.baseLeft = record.baseTotal
-	for part in pairs(record.base) do
-		baseOf[part] = record
+	for _, spot in ipairs(edgePoints(centre, STREET.PlantersPerBlock, STREET.Inset + 4)) do
+		CityBuild.planter(folder, spot.position, rng)
 	end
-
-	table.insert(towers, record)
-	folder.Parent = parent
-end
-
--- When enough of the ground floor is gone, drop the rest. Bricks go
--- through Breaking.shatter rather than being unanchored directly, so
--- the collapse pays out and cleans up like any other demolition.
-local function collapse(tower: Tower, credit: Player?)
-	if tower.collapsed then
-		return
+	for _, spot in ipairs(edgePoints(centre, STREET.BenchesPerBlock, STREET.Inset + 3)) do
+		CityBuild.bench(folder, spot.position, spot.facing)
 	end
-	tower.collapsed = true
-
-	local from = tower.centre + Vector3.new(0, 2, 0)
-	local falling = 0
-
-	for _, part in ipairs(tower.folder:GetDescendants()) do
-		if part:IsA("BasePart") and CollectionService:HasTag(part, TAG) then
-			falling += 1
-			-- push from the base outward, so it topples instead of
-			-- puffing apart in every direction at once
-			Breaking.shatter(part, from, 22, credit)
-		end
+	for _, spot in ipairs(edgePoints(centre, STREET.BinsPerBlock, STREET.Inset + 2)) do
+		CityBuild.bin(folder, spot.position)
 	end
-
-	if credit then
-		local stats = credit:FindFirstChild("leaderstats")
-		local coins = stats and stats:FindFirstChild("Coins")
-		if coins and coins:IsA("IntValue") then
-			coins.Value += RULES.CollapseBonus
-		end
-		print(("%s brought a tower down: %d bricks, +%d bonus")
-			:format(credit.Name, falling, RULES.CollapseBonus))
-	end
-end
-
--- ===========================================================
---  Trees
--- ===========================================================
-
-local function buildTree(parent: Instance, base: Vector3)
-	local model = Instance.new("Model")
-	model.Name = "Tree"
-
-	local lean = CFrame.Angles(
-		math.rad(rng:NextNumber(-4, 4)), math.rad(rng:NextNumber(0, 360)),
-		math.rad(rng:NextNumber(-4, 4)))
-
-	local trunk = makeBrick(model, "Trunk",
-		Vector3.new(TREE.TrunkWidth, TREE.TrunkHeight, TREE.TrunkWidth),
-		CFrame.new(base + Vector3.new(0, TREE.TrunkHeight / 2, 0)) * lean,
-		TREE.Trunk, Enum.Material.Wood)
-	CollectionService:AddTag(trunk, "Choppable")
-
-	for layer = 1, TREE.CanopyLayers do
-		local spread = 13 - (layer - 1) * 3
-		local leaf = makeBrick(model, "Leaves",
-			Vector3.new(spread, 5, spread),
-			CFrame.new(base + Vector3.new(0, TREE.TrunkHeight - 1 + (layer - 1) * 3.4, 0)) * lean,
-			TREE.Leaves[rng:NextInteger(1, #TREE.Leaves)], Enum.Material.Grass)
-		leaf.CanCollide = false
-		CollectionService:AddTag(leaf, "Choppable")
-	end
-
-	model.PrimaryPart = trunk
-	model.Parent = parent
-
-	local record: Tree = { model = model, health = TREE.Health, felled = false }
-	for _, part in ipairs(model:GetDescendants()) do
-		if part:IsA("BasePart") then
-			trees[part] = record
-		end
-	end
-end
-
--- ===========================================================
---  Cars
--- ===========================================================
-
-local function buildCar(parent: Instance, base: Vector3, facing: number)
-	local model = Instance.new("Model")
-	model.Name = "Car"
-
-	local paint = CAR.Palette[rng:NextInteger(1, #CAR.Palette)]
-	local turn = CFrame.Angles(0, facing, 0)
-
-	local body = makeBrick(model, "Body", CAR.Body,
-		CFrame.new(base + Vector3.new(0, 2.6, 0)) * turn,
-		paint, Enum.Material.Metal, CAR.BrickHealth)
-
-	makeBrick(model, "Cabin", CAR.Cabin,
-		CFrame.new(base + Vector3.new(0, 5.1, 0)) * turn,
-		paint:Lerp(Color3.new(0, 0, 0), 0.25), Enum.Material.Glass,
-		CAR.BrickHealth, 0.35)
-
-	for _, offset in ipairs({
-		Vector3.new(-3.4, 1.4, 4.4), Vector3.new(3.4, 1.4, 4.4),
-		Vector3.new(-3.4, 1.4, -4.4), Vector3.new(3.4, 1.4, -4.4),
-	}) do
-		local wheel = makeBrick(model, "Wheel", CAR.Wheel,
-			CFrame.new(base) * turn * CFrame.new(offset) * CFrame.Angles(0, 0, math.rad(90)),
-			Color3.fromRGB(34, 34, 38), Enum.Material.Rubber, CAR.BrickHealth)
-		wheel.Shape = Enum.PartType.Cylinder
-	end
-
-	model.PrimaryPart = body
-	model.Parent = parent
 end
 
 -- ===========================================================
@@ -300,6 +154,18 @@ local function scatter(count: number, centre: Vector3, spread: number, place: (V
 	end
 end
 
+local function registerTower(folder: Folder, base: { [BasePart]: boolean },
+	baseTotal: number, centre: Vector3)
+	local record: Tower = {
+		folder = folder, baseTotal = baseTotal, baseLeft = baseTotal,
+		collapsed = false, centre = centre,
+	}
+	for part in pairs(base) do
+		baseOf[part] = record
+	end
+	table.insert(towers, record)
+end
+
 local function buildCity()
 	local folder = Instance.new("Folder")
 	folder.Name = "City"
@@ -309,7 +175,7 @@ local function buildCity()
 	trees = {}
 
 	local counts = { T = 0, H = 0, P = 0, C = 0 }
-	local stylePool = table.clone(HouseStyles)
+	local stylePool = table.clone(CityConfig.TowerStyles)
 
 	for row = 1, GRID.Rows do
 		local line = CityConfig.Layout[row]
@@ -324,30 +190,52 @@ local function buildCity()
 				blockCentre(col, GRID.Cols), 0, blockCentre(row, GRID.Rows))
 
 			if kind == "T" then
-				buildTower(folder, centre)
+				local style = stylePool[rng:NextInteger(1, #stylePool)]
+				local built, base, total = CityBuild.tower(folder, centre, style, rng)
+				registerTower(built, base, total, centre)
 				counts.T += 1
 
 			elseif kind == "H" then
-				local style = stylePool[rng:NextInteger(1, #stylePool)]
+				local style = HouseStyles[rng:NextInteger(1, #HouseStyles)]
 				local house = HouseBuilder.build(style,
 					CFrame.lookAt(centre, Vector3.new(ORIGIN.X, centre.Y, ORIGIN.Z)))
 				house.Parent = folder
 				counts.H += 1
 
 			elseif kind == "P" then
-				scatter(TREE.PerPark, centre, GRID.BlockSize / 2 - 8, function(at)
-					buildTree(folder, at)
+				scatter(TREE.PerPark, centre, GRID.BlockSize / 2 - 10, function(at)
+					local model = CityBuild.tree(folder, at, rng)
+					local record: Tree = { model = model, health = TREE.Health, felled = false }
+					for _, part in ipairs(model:GetDescendants()) do
+						if part:IsA("BasePart") then
+							trees[part] = record
+						end
+					end
 				end)
 				counts.P += 1
 
 			elseif kind == "C" then
-				scatter(CAR.PerLot, centre, GRID.BlockSize / 2 - 10, function(at)
-					buildCar(folder, at, rng:NextInteger(0, 1) * math.pi / 2)
+				scatter(CAR.PerLot, centre, GRID.BlockSize / 2 - 12, function(at)
+					CityBuild.car(folder, at, rng:NextInteger(0, 1) * math.pi / 2, rng)
 				end)
 				counts.C += 1
 			end
-			-- "M" is the market block and "." is an empty lot; both stay clear
+
+			-- every block gets a pavement, market and empty lots included
+			dressBlock(folder, centre)
 		end
+	end
+
+	-- signals on the four corners of the market block
+	local mid = blockCentre(3, GRID.Cols)
+	local reach = GRID.BlockSize / 2 + GRID.RoadWidth / 2
+	for _, corner in ipairs({
+		{ Vector3.new(-reach, 0, -reach), 0 },
+		{ Vector3.new(reach, 0, -reach), math.pi / 2 },
+		{ Vector3.new(reach, 0, reach), math.pi },
+		{ Vector3.new(-reach, 0, reach), -math.pi / 2 },
+	}) do
+		CityBuild.trafficLight(folder, ORIGIN + Vector3.new(mid, 0, mid) + corner[1], corner[2])
 	end
 
 	folder.Parent = workspace
@@ -370,8 +258,41 @@ end
 rebuildNow()
 
 -- ===========================================================
---  Collapse watch
+--  Collapse
+--
+--  Bricks go through Breaking.shatter rather than being
+--  unanchored directly, so a collapse pays out, applies
+--  impulses and cleans up exactly like any other demolition.
 -- ===========================================================
+
+local function collapse(tower: Tower, credit: Player?)
+	if tower.collapsed then
+		return
+	end
+	tower.collapsed = true
+
+	local from = tower.centre + Vector3.new(0, 2, 0)
+	local falling = 0
+
+	for _, part in ipairs(tower.folder:GetDescendants()) do
+		if part:IsA("BasePart") and CollectionService:HasTag(part, TAG) then
+			falling += 1
+			-- pushed from the base outward, so it topples rather than
+			-- puffing apart in every direction at once
+			Breaking.shatter(part, from, 22, credit)
+		end
+	end
+
+	if credit then
+		local stats = credit:FindFirstChild("leaderstats")
+		local coins = stats and stats:FindFirstChild("Coins")
+		if coins and coins:IsA("IntValue") then
+			coins.Value += RULES.CollapseBonus
+		end
+		print(("%s brought a tower down: %d bricks, +%d bonus")
+			:format(credit.Name, falling, RULES.CollapseBonus))
+	end
+end
 
 Breaking.Destroyed:Connect(function(credit: Player?, brick: BasePart)
 	local tower = baseOf[brick]
@@ -410,7 +331,6 @@ chopping.OnInvoke = function(part: BasePart, damage: number, playerName: string?
 	record.felled = true
 	local player = playerName and Players:FindFirstChild(playerName) or nil
 
-	local pivot = record.model:GetPivot()
 	for _, piece in ipairs(record.model:GetDescendants()) do
 		if piece:IsA("BasePart") then
 			trees[piece] = nil
@@ -436,7 +356,6 @@ chopping.OnInvoke = function(part: BasePart, damage: number, playerName: string?
 		end
 	end
 
-	print(("Tree felled at %d, %d"):format(pivot.X, pivot.Z))
 	return true
 end
 
@@ -474,17 +393,17 @@ task.spawn(function()
 			continue
 		end
 
-		local standing = 0
+		-- stop at the first one still standing; there is no reason to
+		-- count thousands of bricks to learn the answer is "not yet"
+		local standing = false
 		for _, part in ipairs(CollectionService:GetTagged(TAG)) do
 			if part:IsDescendantOf(folder) then
-				standing += 1
-				if standing > 0 then
-					break
-				end
+				standing = true
+				break
 			end
 		end
 
-		if standing > 0 then
+		if standing then
 			continue
 		end
 
