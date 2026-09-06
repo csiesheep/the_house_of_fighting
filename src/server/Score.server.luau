@@ -101,6 +101,11 @@ local function setup(player: Player)
 				bricks.Value += tonumber(saved.bricks) or 0
 				coins.Value += tonumber(saved.coins) or 0
 
+				local spent = tonumber(saved.robuxSpent)
+				if spent and spent > 0 then
+					player:SetAttribute("RobuxSpent", spent)
+				end
+
 				if type(saved.owned) == "table" then
 					for key, owns in pairs(saved.owned) do
 						if owns == true then
@@ -131,9 +136,42 @@ local function save(player: Player)
 		end
 	end
 
-	local data = { bricks = bricks.Value, coins = coins.Value, owned = owned }
+	local spent = player:GetAttribute("RobuxSpent")
+	local data = {
+		bricks = bricks.Value,
+		coins = coins.Value,
+		robuxSpent = typeof(spent) == "number" and spent or 0,
+		owned = owned,
+	}
+
+	-- UpdateAsync rather than SetAsync: two servers holding the same
+	-- player briefly (a rejoin, a teleport) would otherwise have the
+	-- slower write silently overwrite the faster one. Keeping the
+	-- higher of each counter makes the race harmless.
 	pcall(function()
-		store:SetAsync("player_" .. player.UserId, data)
+		store:UpdateAsync("player_" .. player.UserId, function(existing)
+			if type(existing) ~= "table" then
+				return data
+			end
+
+			local merged = {
+				bricks = math.max(data.bricks, tonumber(existing.bricks) or 0),
+				coins = math.max(data.coins, tonumber(existing.coins) or 0),
+				robuxSpent = math.max(data.robuxSpent, tonumber(existing.robuxSpent) or 0),
+				owned = data.owned,
+			}
+
+			-- an item owned in either copy stays owned
+			if type(existing.owned) == "table" then
+				for key, owns in pairs(existing.owned) do
+					if owns == true then
+						merged.owned[key] = true
+					end
+				end
+			end
+
+			return merged
+		end)
 	end)
 end
 

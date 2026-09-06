@@ -43,10 +43,38 @@ local function refreshPasses(player: Player)
 	player:SetAttribute("Admin", player:GetAttribute("Pass_AdminCommands") == true)
 end
 
+-- What someone has actually spent, for the Robux leaderboard. Priced
+-- from Roblox rather than the config, since the config number is only
+-- an intention and the dashboard is what really charges.
+local function recordSpend(player: Player, id: number, infoType: EnumItem, fallback: number?)
+	local price = fallback
+	local ok, info = pcall(function()
+		return MarketplaceService:GetProductInfo(id, infoType)
+	end)
+	if ok and info and type(info.PriceInRobux) == "number" then
+		price = info.PriceInRobux
+	end
+	if not price or price <= 0 then
+		return
+	end
+
+	local spent = player:GetAttribute("RobuxSpent")
+	player:SetAttribute("RobuxSpent",
+		(typeof(spent) == "number" and spent or 0) + price)
+end
+
 -- grant the moment they buy, rather than making them rejoin
-MarketplaceService.PromptGamePassPurchaseFinished:Connect(function(player, _passId, wasPurchased)
-	if wasPurchased then
-		refreshPasses(player)
+MarketplaceService.PromptGamePassPurchaseFinished:Connect(function(player, passId, wasPurchased)
+	if not wasPurchased then
+		return
+	end
+	refreshPasses(player)
+
+	for _, pass in ipairs(ShopConfig.GamePasses) do
+		if pass.id == passId then
+			recordSpend(player, passId, Enum.InfoType.GamePass, pass.robux)
+			break
+		end
 	end
 end)
 
@@ -58,6 +86,9 @@ Players.PlayerAdded:Connect(function(player)
 	end
 	player:SetAttribute("HammerTier", 1)
 	player:SetAttribute("Admin", false)
+	if player:GetAttribute("RobuxSpent") == nil then
+		player:SetAttribute("RobuxSpent", 0)
+	end
 
 	task.spawn(refreshPasses, player)
 end)
@@ -149,6 +180,13 @@ MarketplaceService.ProcessReceipt = function(receiptInfo)
 		pcall(function()
 			receiptStore:SetAsync(key, true)
 		end)
+	end
+
+	for _, product in ipairs(ShopConfig.Products) do
+		if product.id == receiptInfo.ProductId then
+			recordSpend(player, product.id, Enum.InfoType.Product, product.robux)
+			break
+		end
 	end
 
 	return Enum.ProductPurchaseDecision.PurchaseGranted
