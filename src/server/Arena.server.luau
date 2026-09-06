@@ -173,8 +173,15 @@ print(("Arena: %d tiles, %d spawns, floor radius %d, wall radius %d x %d high")
 
 local rng = Random.new()
 
+-- Where each player last had both feet on something solid inside the
+-- arena. Falling used to drop you on a random spawn pad, which on a
+-- map this wide could be most of a minute of walking back for a
+-- mistake that took a second.
+local lastSafe: { [Player]: Vector3 } = {}
+
 task.spawn(function()
 	local floorY = ARENA.Origin.Y - StageConfig.Respawn.FallGrace
+	local edge = ARENA.Radius + 6
 
 	while true do
 		task.wait(StageConfig.Respawn.CheckRate)
@@ -182,17 +189,47 @@ task.spawn(function()
 		for _, player in ipairs(Players:GetPlayers()) do
 			local character = player.Character
 			local root = character and character:FindFirstChild("HumanoidRootPart")
-			if root and root:IsA("BasePart") and root.Position.Y < floorY then
+			local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+			if not (root and root:IsA("BasePart") and humanoid) then
+				continue
+			end
+
+			local position = root.Position
+
+			if position.Y < floorY then
 				local stats = player:FindFirstChild("leaderstats")
 				local falls = stats and stats:FindFirstChild("Falls")
 				if falls and falls:IsA("IntValue") then
 					falls.Value += 1
 				end
-				local pad = spawnPads[rng:NextInteger(1, #spawnPads)]
-				character:PivotTo(CFrame.new(pad.Position + Vector3.new(0, 4, 0)))
+
+				-- back to where you fell from, not to a spawn pad
+				local target = lastSafe[player]
+				if not target then
+					target = spawnPads[rng:NextInteger(1, #spawnPads)].Position
+				end
+				character:PivotTo(CFrame.new(target + Vector3.new(0, 5, 0)))
+				continue
+			end
+
+			-- Only record while standing on something, inside the arena.
+			-- Mid-air positions are exactly the ones that would put you
+			-- straight back over the hole you just fell through.
+			if humanoid.FloorMaterial == Enum.Material.Air then
+				continue
+			end
+
+			local radius = Vector3.new(position.X - ARENA.Origin.X, 0,
+				position.Z - ARENA.Origin.Z).Magnitude
+			if radius <= edge then
+				lastSafe[player] = position
 			end
 		end
 	end
+end)
+
+Players.PlayerRemoving:Connect(function(player)
+	lastSafe[player] = nil
 end)
 
 -- leaderstats is created by Score.server.luau, which owns it. Two
