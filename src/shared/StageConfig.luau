@@ -29,6 +29,13 @@ StageConfig.Boundary = {
 	Transparency = 0.75,   -- barely there, so the wall does not shade the arena
 }
 
+-- Openings in the boundary wall, one per obby, each sitting midway
+-- between two houses so a walkway out never clips a roof.
+StageConfig.Gates = {
+	Angles = { 18, 90, 162, 234, 306 },
+	HalfWidthDeg = 6,
+}
+
 StageConfig.Respawn = {
 	FallGrace = 40,    -- studs below the floor before you are pulled back
 	CheckRate = 0.3,

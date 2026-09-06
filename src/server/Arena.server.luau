@@ -83,12 +83,30 @@ end
 --  Boundary wall
 -- ===========================================================
 
+-- true if this angle falls inside one of the obby gates
+local function inGate(degrees: number): boolean
+	for _, gate in ipairs(StageConfig.Gates.Angles) do
+		local delta = math.abs((degrees - gate + 180) % 360 - 180)
+		if delta <= StageConfig.Gates.HalfWidthDeg then
+			return true
+		end
+	end
+	return false
+end
+
 local function buildBoundary()
 	local segments = BOUND.Segments
 	local segmentWidth = 2 * math.pi * BOUND.Radius / segments + 1
+	local gaps = 0
 
 	for i = 1, segments do
 		local angle = (i - 1) / segments * math.pi * 2
+
+		-- leave a doorway where an obby walkway passes through
+		if inGate(math.deg(angle)) then
+			gaps += 1
+			continue
+		end
 
 		local panel = Instance.new("Part")
 		panel.Name = "Boundary"
@@ -108,6 +126,9 @@ local function buildBoundary()
 		panel.BottomSurface = Enum.SurfaceType.Smooth
 		panel.Parent = stage
 	end
+
+	print(("Boundary: %d panels, %d left open as obby gates")
+		:format(segments - gaps, gaps))
 end
 
 -- ===========================================================
