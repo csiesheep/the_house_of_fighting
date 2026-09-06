@@ -163,7 +163,10 @@ function CityBuild.tower(parent: Instance, centre: Vector3, style, rng: Random)
 	local folder = Instance.new("Folder")
 	folder.Name = style.name:gsub("%s", "")
 
-	local brick = BRICK.Size
+	-- coarser panels for the tall ones, so a skyscraper is not a
+	-- thousand parts on its own
+	local scale = style.brickScale or 1
+	local brick = BRICK.Size * scale
 	local width = style.widthBricks * brick.X
 	local depth = style.depthBricks * brick.X
 	local base: { [BasePart]: boolean } = {}
@@ -366,7 +369,7 @@ function CityBuild.tree(parent: Instance, base: Vector3, rng: Random): Model
 	return model
 end
 
-function CityBuild.car(parent: Instance, base: Vector3, facing: number, rng: Random)
+function CityBuild.car(parent: Instance, base: Vector3, facing: number, rng: Random): Model
 	local model = Instance.new("Model")
 	model.Name = "Car"
 
@@ -394,6 +397,7 @@ function CityBuild.car(parent: Instance, base: Vector3, facing: number, rng: Ran
 
 	model.PrimaryPart = body
 	model.Parent = parent
+	return model
 end
 
 return CityBuild

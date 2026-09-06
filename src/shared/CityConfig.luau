@@ -21,13 +21,16 @@ CityConfig.Grid = {
 	LaneMark = 1.6,   -- width of the painted centre line
 }
 
--- T tower   H houses   P park (trees)   C car park   M market   . empty
+-- S skyscraper   T tower   H houses   P park   C car park   M market   . empty
+--
+-- Skyscrapers sit in a ring just off the middle, so the market has a
+-- skyline around it rather than towers scattered at random.
 CityConfig.Layout = {
-	"T H T C T",
-	"P T . T H",
+	"T H S C T",
+	"P S T S H",
 	"T . M . T",
-	"H T . T P",
-	"T C T H T",
+	"H S T S P",
+	"T C S H T",
 }
 
 CityConfig.Brick = {
@@ -46,6 +49,11 @@ CityConfig.Brick = {
 --    grid     alternating bricks on alternating courses
 --    columns  vertical strips running the whole height
 --    shop     one tall glazed floor at street level
+--
+--  brickScale multiplies the brick, so a skyscraper is built
+--  from panels rather than bricks. At the normal size a 100
+--  stud tower is about a thousand parts on its own; at scale 2
+--  it is a quarter of that and looks the part besides.
 -- ===========================================================
 
 CityConfig.TowerRules = {
@@ -101,13 +109,38 @@ CityConfig.TowerStyles = {
 	},
 }
 
+-- The tall ones. Same builder, coarser panels.
+CityConfig.SkyscraperStyles = {
+	{
+		name = "Glass Skyscraper",
+		widthBricks = 6, depthBricks = 6, courses = 20, brickScale = 2,
+		windows = "bands", bandEvery = 2, roof = "antenna",
+		wall = Color3.fromRGB(74, 96, 118),
+		accent = Color3.fromRGB(128, 158, 184),
+	},
+	{
+		name = "Steel Spire",
+		widthBricks = 5, depthBricks = 5, courses = 24, brickScale = 2,
+		windows = "columns", roof = "stepped",
+		wall = Color3.fromRGB(108, 112, 124),
+		accent = Color3.fromRGB(186, 192, 202),
+	},
+	{
+		name = "Corporate Slab",
+		widthBricks = 7, depthBricks = 5, courses = 18, brickScale = 2,
+		windows = "grid", roof = "parapet",
+		wall = Color3.fromRGB(160, 152, 140),
+		accent = Color3.fromRGB(96, 92, 88),
+	},
+}
+
 -- ===========================================================
 --  Street furniture
 -- ===========================================================
 
 CityConfig.Street = {
-	LampsPerBlock    = 4,
-	PlantersPerBlock = 3,
+	LampsPerBlock    = 3,
+	PlantersPerBlock = 2,
 	BenchesPerBlock  = 2,
 	BinsPerBlock     = 1,
 	Inset            = 3,     -- from the block edge onto the pavement
@@ -171,6 +204,18 @@ CityConfig.Car = {
 		Color3.fromRGB(56, 62, 72),
 		Color3.fromRGB(96, 168, 132),
 	},
+}
+
+-- Cars driving the road grid. Anchored and moved by the server rather
+-- than simulated: two dozen physics vehicles would spend more compute
+-- than the whole rest of the map and drive worse for it.
+CityConfig.Traffic = {
+	PerLane   = 1,
+	LaneOffset = 6,     -- from the centre line of the road
+	Speed     = 26,     -- studs per second
+	SpeedJitter = 6,
+	Damage    = 22,     -- to anyone it runs into
+	HitCooldown = 1.5,
 }
 
 CityConfig.Rules = {

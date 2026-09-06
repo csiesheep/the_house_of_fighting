@@ -11,19 +11,25 @@
 --  trust the position the client asked for.
 -- ===========================================================
 
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local StageConfig = require(ReplicatedStorage:WaitForChild("StageConfig"))
+
 local Building = {}
 
 Building.BrickSize = Vector3.new(4, 2, 4)
 Building.Health    = 2       -- same as house brick: your wall is no tougher
 Building.Reach     = 40      -- studs you can place from
-Building.MaxPerPlayer = 250
+Building.MaxPerPlayer = 20   -- bricks standing at once, per player
 
 -- Grid is anchored to the arena floor, so a placed brick sits flush
 -- with the ground and stacks in the same 2 stud courses the houses use.
 Building.Origin = Vector3.new(0, 24, 0)
 
--- keeps building inside the walls
-Building.MaxRadius = 60
+-- Anywhere inside the walls. The obbies live outside them, so
+-- bounding to the map keeps them out without naming them: nobody gets
+-- to bridge a gap on Impossible with a placed brick.
+Building.MaxHeight = 220
+Building.EdgeMargin = 4
 
 Building.Tag = "Breakable"
 Building.FolderName = "PlayerBuilds"
@@ -59,14 +65,14 @@ function Building.colourFor(userId: number): Color3
 end
 
 function Building.withinArena(position: Vector3): boolean
-	local flat = Vector3.new(
-		position.X - Building.Origin.X,
-		0,
-		position.Z - Building.Origin.Z
-	)
-	return flat.Magnitude <= Building.MaxRadius
-		and position.Y >= Building.Origin.Y
-		and position.Y <= Building.Origin.Y + 120
+	local bounds = StageConfig.Bounds
+	local dx = math.abs(position.X - bounds.Origin.X)
+	local dz = math.abs(position.Z - bounds.Origin.Z)
+
+	return dx <= bounds.HalfX - Building.EdgeMargin
+		and dz <= bounds.HalfZ - Building.EdgeMargin
+		and position.Y >= bounds.Origin.Y
+		and position.Y <= bounds.Origin.Y + Building.MaxHeight
 end
 
 return Building

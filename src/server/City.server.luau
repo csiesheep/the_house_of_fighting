@@ -12,6 +12,7 @@
 
 local Players           = game:GetService("Players")
 local CollectionService = game:GetService("CollectionService")
+local RunService        = game:GetService("RunService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local ServerStorage     = game:GetService("ServerStorage")
 local Debris            = game:GetService("Debris")
@@ -28,8 +29,9 @@ local GRID   = CityConfig.Grid
 local RULES  = CityConfig.Rules
 local TOWER  = CityConfig.TowerRules
 local STREET = CityConfig.Street
-local TREE   = CityConfig.Tree
-local CAR    = CityConfig.Car
+local TREE    = CityConfig.Tree
+local CAR     = CityConfig.Car
+local TRAFFIC = CityConfig.Traffic
 local ORIGIN = StageConfig.Bounds.Origin
 local TAG    = HouseConfig.BreakableTag
 
@@ -166,6 +168,124 @@ local function registerTower(folder: Folder, base: { [BasePart]: boolean },
 	table.insert(towers, record)
 end
 
+-- ===========================================================
+--  Traffic
+--
+--  Anchored and driven by the server rather than simulated.
+--  Two dozen physics vehicles would cost more than the rest of
+--  the map put together and drive worse for it.
+-- ===========================================================
+
+type Car = {
+	model: Model,
+	base: Vector3,      -- the lane point at t = 0
+	along: Vector3,     -- unit direction of travel
+	span: number,       -- half the length of the run
+	t: number,
+	speed: number,
+	crashed: boolean,
+}
+
+local traffic: { Car } = {}
+local trafficOf: { [BasePart]: Car } = {}
+local lastHit: { [Player]: number } = {}
+
+local function roadLine(index: number, count: number): number
+	local half = (count * GRID.BlockSize + (count + 1) * GRID.RoadWidth) / 2
+	return -half + GRID.RoadWidth / 2 + (index - 1) * (GRID.BlockSize + GRID.RoadWidth)
+end
+
+local function addCar(folder: Instance, base: Vector3, along: Vector3, span: number, start: number)
+	local model = CityBuild.car(folder, base + along * start, 0, rng)
+
+	local car: Car = {
+		model = model, base = base, along = along, span = span,
+		t = start,
+		speed = TRAFFIC.Speed + rng:NextNumber(-TRAFFIC.SpeedJitter, TRAFFIC.SpeedJitter),
+		crashed = false,
+	}
+
+	for _, part in ipairs(model:GetDescendants()) do
+		if part:IsA("BasePart") then
+			trafficOf[part] = car
+		end
+	end
+
+	-- getting run over should hurt, but not once per frame of contact
+	local body = model.PrimaryPart
+	if body then
+		body.Touched:Connect(function(hit)
+			if car.crashed then
+				return
+			end
+			local character = hit:FindFirstAncestorOfClass("Model")
+			local player = character and Players:GetPlayerFromCharacter(character)
+			local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+			if not (player and humanoid and humanoid.Health > 0) then
+				return
+			end
+			local now = os.clock()
+			if lastHit[player] and now - lastHit[player] < TRAFFIC.HitCooldown then
+				return
+			end
+			lastHit[player] = now
+			humanoid:TakeDamage(TRAFFIC.Damage)
+		end)
+	end
+
+	table.insert(traffic, car)
+end
+
+local function buildTraffic(folder: Instance)
+	traffic = {}
+	trafficOf = {}
+
+	local halfX = StageConfig.Bounds.HalfX
+	local halfZ = StageConfig.Bounds.HalfZ
+
+	-- roads running north to south, then east to west. One car per
+	-- lane per road, offset to its own side of the centre line.
+	for i = 1, GRID.Cols + 1 do
+		local x = roadLine(i, GRID.Cols)
+		for _, direction in ipairs({ 1, -1 }) do
+			for n = 1, TRAFFIC.PerLane do
+				local start = -halfZ + (n - 0.5) * (2 * halfZ / TRAFFIC.PerLane)
+				addCar(folder,
+					ORIGIN + Vector3.new(x - TRAFFIC.LaneOffset * direction, 0, 0),
+					Vector3.new(0, 0, direction), halfZ, start * direction)
+			end
+		end
+	end
+
+	for i = 1, GRID.Rows + 1 do
+		local z = roadLine(i, GRID.Rows)
+		for _, direction in ipairs({ 1, -1 }) do
+			for n = 1, TRAFFIC.PerLane do
+				local start = -halfX + (n - 0.5) * (2 * halfX / TRAFFIC.PerLane)
+				addCar(folder,
+					ORIGIN + Vector3.new(0, 0, z + TRAFFIC.LaneOffset * direction),
+					Vector3.new(direction, 0, 0), halfX, start * direction)
+			end
+		end
+	end
+end
+
+RunService.Heartbeat:Connect(function(delta)
+	for _, car in ipairs(traffic) do
+		if car.crashed or not car.model.Parent then
+			continue
+		end
+
+		car.t += car.speed * delta
+		if car.t > car.span then
+			car.t = -car.span         -- off one edge, back on at the other
+		end
+
+		local position = car.base + car.along * car.t
+		car.model:PivotTo(CFrame.lookAt(position, position + car.along))
+	end
+end)
+
 local function buildCity()
 	local folder = Instance.new("Folder")
 	folder.Name = "City"
@@ -174,8 +294,9 @@ local function buildCity()
 	baseOf = {}
 	trees = {}
 
-	local counts = { T = 0, H = 0, P = 0, C = 0 }
+	local counts = { S = 0, T = 0, H = 0, P = 0, C = 0 }
 	local stylePool = table.clone(CityConfig.TowerStyles)
+	local skyPool = table.clone(CityConfig.SkyscraperStyles)
 
 	for row = 1, GRID.Rows do
 		local line = CityConfig.Layout[row]
@@ -194,6 +315,12 @@ local function buildCity()
 				local built, base, total = CityBuild.tower(folder, centre, style, rng)
 				registerTower(built, base, total, centre)
 				counts.T += 1
+
+			elseif kind == "S" then
+				local style = skyPool[rng:NextInteger(1, #skyPool)]
+				local built, base, total = CityBuild.tower(folder, centre, style, rng)
+				registerTower(built, base, total, centre)
+				counts.S += 1
 
 			elseif kind == "H" then
 				local style = HouseStyles[rng:NextInteger(1, #HouseStyles)]
@@ -241,8 +368,12 @@ local function buildCity()
 	folder.Parent = workspace
 	city = folder
 
-	print(("City built: %d towers, %d houses, %d parks, %d car parks, %d parts")
-		:format(counts.T, counts.H, counts.P, counts.C, #folder:GetDescendants()))
+	buildTraffic(folder)
+
+	print(("City built: %d skyscrapers, %d towers, %d houses, %d parks, %d car parks, "
+		.. "%d cars driving, %d parts")
+		:format(counts.S, counts.T, counts.H, counts.P, counts.C,
+			#traffic, #folder:GetDescendants()))
 end
 
 local function rebuildNow()
@@ -295,6 +426,17 @@ local function collapse(tower: Tower, credit: Player?)
 end
 
 Breaking.Destroyed:Connect(function(credit: Player?, brick: BasePart)
+	-- a car that loses a panel stops being traffic and becomes wreckage
+	local car = trafficOf[brick]
+	if car and not car.crashed then
+		car.crashed = true
+		for _, piece in ipairs(car.model:GetDescendants()) do
+			if piece:IsA("BasePart") then
+				piece.Anchored = false
+			end
+		end
+	end
+
 	local tower = baseOf[brick]
 	if not tower or tower.collapsed then
 		return
@@ -382,6 +524,10 @@ end)
 Players.PlayerAdded:Connect(function(player)
 	task.wait(1)
 	switchState:FireClient(player, switchReadyAt, { "CITY" })
+end)
+
+Players.PlayerRemoving:Connect(function(player)
+	lastHit[player] = nil
 end)
 
 task.spawn(function()
