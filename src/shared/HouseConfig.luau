@@ -9,17 +9,13 @@ HouseConfig.House = {
 	BrickSize   = Vector3.new(4, 2, 2),   -- long, tall, thick
 	BrickHealth = 2,                      -- hammer blows to destroy one brick
 
-	HouseCount = 10,     -- houses standing at once; one of each style
-	PlotRadius = 96,     -- ring radius. At 10 houses this gives 59 studs
-	                     -- between neighbours, against 56 needed for the
-	                     -- widest style, so nothing clips.
+	-- Placement belongs to CityConfig now: houses stand on the blocks
+	-- the layout marks "H". Only the brick itself is described here.
 
 	-- When a brick breaks, unanchor whatever was resting on it so the
 	-- wall sags instead of leaving bricks floating in mid air.
 	CollapseAbove = true,
 
-	RebuildDelay   = 8,    -- seconds after the last brick falls
-	SwitchCooldown = 300,  -- 5 minutes before the switch button appears
 }
 
 HouseConfig.Hammer = {

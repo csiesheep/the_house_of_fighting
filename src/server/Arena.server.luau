@@ -2,92 +2,115 @@
 -- ===========================================================
 --  THE HOUSE OF FIGHTING -- the ground and the boundary
 --
---  A solid base slab, a decorative tiled disc on top of it,
---  spawn pads, and a wall around the whole thing.
+--  A rectangular slab, the road grid painted onto it, spawn
+--  pads on the ring road, and a wall around the lot with gaps
+--  where the obby walkways leave.
 --
---  The wall is not tagged Breakable. It is the one structure
---  in the place the hammer cannot touch.
+--  City.server.luau puts buildings on the blocks; this only
+--  lays the ground they stand on.
 -- ===========================================================
 
 local Players           = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local StageConfig = require(ReplicatedStorage:WaitForChild("StageConfig"))
-local ARENA = StageConfig.Arena
-local BASE  = StageConfig.Base
-local BOUND = StageConfig.Boundary
+local CityConfig  = require(ReplicatedStorage:WaitForChild("CityConfig"))
+
+local BOUNDS = StageConfig.Bounds
+local BASE   = StageConfig.Base
+local BOUND  = StageConfig.Boundary
+local GRID   = CityConfig.Grid
+local ORIGIN = BOUNDS.Origin
 
 local stage = Instance.new("Folder")
 stage.Name = "Stage"
 
 local spawnPads: { SpawnLocation } = {}
-local tileCount = 0
 
--- ===========================================================
---  Floor
--- ===========================================================
-
--- One solid disc under everything. The tiles above are a jagged
--- circle; this is what stops you falling between them.
-local function buildBase()
-	local slab = Instance.new("Part")
-	slab.Name = "Base"
-	slab.Anchored = true
-	slab.Shape = Enum.PartType.Cylinder
-	slab.Size = Vector3.new(BASE.Depth, BASE.Radius * 2, BASE.Radius * 2)
-	-- a cylinder's flat faces point along X, so stand it on end
-	slab.CFrame = CFrame.new(ARENA.Origin - Vector3.new(0, BASE.Inset + BASE.Depth / 2, 0))
-		* CFrame.Angles(0, 0, math.rad(90))
-	slab.Color = StageConfig.Palette.Base
-	slab.Material = Enum.Material.Slate
-	slab.TopSurface = Enum.SurfaceType.Smooth
-	slab.Parent = stage
+local function makePart(name: string, size: Vector3, cframe: CFrame,
+	colour: Color3, material: Enum.Material): Part
+	local part = Instance.new("Part")
+	part.Name = name
+	part.Anchored = true
+	part.Size = size
+	part.CFrame = cframe
+	part.Color = colour
+	part.Material = material
+	part.TopSurface = Enum.SurfaceType.Smooth
+	part.BottomSurface = Enum.SurfaceType.Smooth
+	part.Parent = stage
+	return part
 end
 
-local function buildTiles()
-	local size = ARENA.TileSize
-	local reach = math.ceil(ARENA.Radius / size)
+-- ===========================================================
+--  Ground
+-- ===========================================================
 
-	for gx = -reach, reach do
-		for gz = -reach, reach do
-			local cx, cz = gx * size, gz * size
-			local distance = math.sqrt(cx * cx + cz * cz)
-			if distance > ARENA.Radius then
-				continue
-			end
+local function buildGround()
+	local width = BOUNDS.HalfX * 2 + BASE.Overhang * 2
+	local depth = BOUNDS.HalfZ * 2 + BASE.Overhang * 2
 
-			local tile = Instance.new("Part")
-			tile.Name = "Tile"
-			tile.Anchored = true
-			tile.Size = Vector3.new(size, ARENA.TileHeight, size)
-			tile.Position = ARENA.Origin + Vector3.new(cx, -ARENA.TileHeight / 2, cz)
-			tile.TopSurface = Enum.SurfaceType.Smooth
-			tile.BottomSurface = Enum.SurfaceType.Smooth
-			tile.Material = Enum.Material.Slate
+	-- One slab under everything. Roads and pavements are painted on
+	-- top of it, so there is never a seam you can fall through.
+	makePart("Base", Vector3.new(width, BASE.Depth, depth),
+		CFrame.new(ORIGIN - Vector3.new(0, BASE.Inset + BASE.Depth / 2, 0)),
+		StageConfig.Palette.Base, Enum.Material.Concrete)
 
-			if distance > ARENA.Radius - size then
-				tile.Color = StageConfig.Palette.Edge
-			elseif (gx + gz) % 2 == 0 then
-				tile.Color = StageConfig.Palette.TileA
-			else
-				tile.Color = StageConfig.Palette.TileB
-			end
+	makePart("Roads", Vector3.new(BOUNDS.HalfX * 2, 1, BOUNDS.HalfZ * 2),
+		CFrame.new(ORIGIN - Vector3.new(0, 0.5, 0)),
+		StageConfig.Palette.Road, Enum.Material.Asphalt)
+end
 
-			tile.Parent = stage
-			tileCount += 1
+local function blockCentre(index: number, count: number): number
+	local half = (count * GRID.BlockSize + (count + 1) * GRID.RoadWidth) / 2
+	return -half + GRID.RoadWidth + (index - 1) * (GRID.BlockSize + GRID.RoadWidth)
+		+ GRID.BlockSize / 2
+end
+
+-- Block pads sit proud of the road, so the grid reads as pavement and
+-- tarmac rather than one flat colour.
+local function buildBlockPads()
+	for col = 1, GRID.Cols do
+		for row = 1, GRID.Rows do
+			makePart("Pavement", Vector3.new(GRID.BlockSize, 1.2, GRID.BlockSize),
+				CFrame.new(ORIGIN + Vector3.new(
+					blockCentre(col, GRID.Cols), -0.4, blockCentre(row, GRID.Rows))),
+				StageConfig.Palette.Pavement, Enum.Material.Concrete)
 		end
 	end
 end
 
+local function buildRoadMarkings()
+	local spanX = BOUNDS.HalfX * 2 - 4
+	local spanZ = BOUNDS.HalfZ * 2 - 4
+
+	for i = 1, GRID.Cols + 1 do
+		local x = -BOUNDS.HalfX + GRID.RoadWidth / 2
+			+ (i - 1) * (GRID.BlockSize + GRID.RoadWidth)
+		makePart("Lane", Vector3.new(GRID.LaneMark, 1.1, spanZ),
+			CFrame.new(ORIGIN + Vector3.new(x, -0.42, 0)),
+			StageConfig.Palette.RoadLine, Enum.Material.SmoothPlastic)
+	end
+
+	for i = 1, GRID.Rows + 1 do
+		local z = -BOUNDS.HalfZ + GRID.RoadWidth / 2
+			+ (i - 1) * (GRID.BlockSize + GRID.RoadWidth)
+		makePart("Lane", Vector3.new(spanX, 1.1, GRID.LaneMark),
+			CFrame.new(ORIGIN + Vector3.new(0, -0.42, z)),
+			StageConfig.Palette.RoadLine, Enum.Material.SmoothPlastic)
+	end
+end
+
 -- ===========================================================
---  Boundary wall
+--  Boundary
 -- ===========================================================
 
--- true if this angle falls inside one of the obby gates
-local function inGate(degrees: number): boolean
-	for _, gate in ipairs(StageConfig.Gates.Angles) do
-		local delta = math.abs((degrees - gate + 180) % 360 - 180)
-		if delta <= StageConfig.Gates.HalfWidthDeg then
+-- true if this point on the wall falls inside an obby gateway
+local function inGate(point: Vector3): boolean
+	for _, gate in ipairs(StageConfig.Gates) do
+		local delta = point - gate.position
+		if math.abs(delta.X) <= BOUND.GateHalfWidth
+			and math.abs(delta.Z) <= BOUND.GateHalfWidth then
 			return true
 		end
 	end
@@ -95,40 +118,41 @@ local function inGate(degrees: number): boolean
 end
 
 local function buildBoundary()
-	local segments = BOUND.Segments
-	local segmentWidth = 2 * math.pi * BOUND.Radius / segments + 1
-	local gaps = 0
+	local panels, gaps = 0, 0
 
-	for i = 1, segments do
-		local angle = (i - 1) / segments * math.pi * 2
+	local function runWall(from: Vector3, to: Vector3)
+		local span = to - from
+		local length = span.Magnitude
+		local direction = span.Unit
+		local steps = math.ceil(length / BOUND.SegmentLength)
+		local segment = length / steps
 
-		-- leave a doorway where an obby walkway passes through
-		if inGate(math.deg(angle)) then
-			gaps += 1
-			continue
+		for i = 1, steps do
+			local centre = from + direction * (segment * (i - 0.5))
+
+			if inGate(centre) then
+				gaps += 1
+				continue
+			end
+
+			local at = ORIGIN + centre + Vector3.new(0, BOUND.Height / 2, 0)
+			local panel = makePart("Boundary",
+				Vector3.new(segment + 0.5, BOUND.Height, BOUND.Thickness),
+				CFrame.lookAt(at, at + direction) * CFrame.Angles(0, math.rad(90), 0),
+				StageConfig.Palette.Boundary, Enum.Material.Glass)
+			panel.Transparency = BOUND.Transparency
+			panel.Reflectance = 0.1
+			panels += 1
 		end
-
-		local panel = Instance.new("Part")
-		panel.Name = "Boundary"
-		panel.Anchored = true
-		panel.CanCollide = true
-		panel.Size = Vector3.new(segmentWidth, BOUND.Height, BOUND.Thickness)
-		panel.CFrame = CFrame.new(ARENA.Origin + Vector3.new(
-			math.cos(angle) * BOUND.Radius,
-			BOUND.Height / 2,
-			math.sin(angle) * BOUND.Radius
-		)) * CFrame.Angles(0, -angle, 0)
-		panel.Color = StageConfig.Palette.Boundary
-		panel.Material = Enum.Material.Glass
-		panel.Transparency = BOUND.Transparency
-		panel.Reflectance = 0.1
-		panel.TopSurface = Enum.SurfaceType.Smooth
-		panel.BottomSurface = Enum.SurfaceType.Smooth
-		panel.Parent = stage
 	end
 
-	print(("Boundary: %d panels, %d left open as obby gates")
-		:format(segments - gaps, gaps))
+	local x, z = BOUNDS.HalfX, BOUNDS.HalfZ
+	runWall(Vector3.new(-x, 0, -z), Vector3.new(x, 0, -z))
+	runWall(Vector3.new(x, 0, -z), Vector3.new(x, 0, z))
+	runWall(Vector3.new(x, 0, z), Vector3.new(-x, 0, z))
+	runWall(Vector3.new(-x, 0, z), Vector3.new(-x, 0, -z))
+
+	print(("Boundary: %d panels, %d openings for obby gates"):format(panels, gaps))
 end
 
 -- ===========================================================
@@ -136,18 +160,18 @@ end
 -- ===========================================================
 
 local function buildSpawns()
-	for i = 1, ARENA.SpawnCount do
-		local angle = (i - 1) / ARENA.SpawnCount * math.pi * 2
+	for i = 1, StageConfig.Spawns.Count do
+		local angle = (i - 1) / StageConfig.Spawns.Count * math.pi * 2
 		local pad = Instance.new("SpawnLocation")
 		pad.Name = "Spawn" .. i
 		pad.Anchored = true
 		pad.Neutral = true
 		pad.Duration = 0                  -- no forcefield; this is a fighting game
 		pad.Size = Vector3.new(6, 1, 6)
-		pad.Position = ARENA.Origin + Vector3.new(
-			math.cos(angle) * ARENA.SpawnRadius,
-			0.5,
-			math.sin(angle) * ARENA.SpawnRadius
+		pad.Position = ORIGIN + Vector3.new(
+			math.cos(angle) * StageConfig.Spawns.Radius,
+			0.6,
+			math.sin(angle) * StageConfig.Spawns.Radius
 		)
 		pad.Color = StageConfig.Palette.Spawn
 		pad.Material = Enum.Material.Neon
@@ -157,15 +181,16 @@ local function buildSpawns()
 	end
 end
 
-buildBase()
-buildTiles()
+buildGround()
+buildBlockPads()
+buildRoadMarkings()
 buildBoundary()
 buildSpawns()
 
 stage.Parent = workspace   -- parent once, at the end
 
-print(("Arena: %d tiles, %d spawns, floor radius %d, wall radius %d x %d high")
-	:format(tileCount, #spawnPads, ARENA.Radius, BOUND.Radius, BOUND.Height))
+print(("Arena: %d x %d studs, %d spawns")
+	:format(BOUNDS.HalfX * 2, BOUNDS.HalfZ * 2, #spawnPads))
 
 -- ===========================================================
 --  Fall recovery
@@ -174,14 +199,12 @@ print(("Arena: %d tiles, %d spawns, floor radius %d, wall radius %d x %d high")
 local rng = Random.new()
 
 -- Where each player last had both feet on something solid inside the
--- arena. Falling used to drop you on a random spawn pad, which on a
--- map this wide could be most of a minute of walking back for a
--- mistake that took a second.
+-- map. Falling used to drop you on a random spawn pad, which across a
+-- map this wide was most of a minute of walking back.
 local lastSafe: { [Player]: Vector3 } = {}
 
 task.spawn(function()
-	local floorY = ARENA.Origin.Y - StageConfig.Respawn.FallGrace
-	local edge = ARENA.Radius + 6
+	local floorY = ORIGIN.Y - StageConfig.Respawn.FallGrace
 
 	while true do
 		task.wait(StageConfig.Respawn.CheckRate)
@@ -203,7 +226,6 @@ task.spawn(function()
 					falls.Value += 1
 				end
 
-				-- back to where you fell from, not to a spawn pad
 				local target = lastSafe[player]
 				if not target then
 					target = spawnPads[rng:NextInteger(1, #spawnPads)].Position
@@ -212,16 +234,16 @@ task.spawn(function()
 				continue
 			end
 
-			-- Only record while standing on something, inside the arena.
+			-- Only record while standing on something, inside the walls.
 			-- Mid-air positions are exactly the ones that would put you
 			-- straight back over the hole you just fell through.
 			if humanoid.FloorMaterial == Enum.Material.Air then
 				continue
 			end
 
-			local radius = Vector3.new(position.X - ARENA.Origin.X, 0,
-				position.Z - ARENA.Origin.Z).Magnitude
-			if radius <= edge then
+			local dx = math.abs(position.X - ORIGIN.X)
+			local dz = math.abs(position.Z - ORIGIN.Z)
+			if dx <= BOUNDS.HalfX and dz <= BOUNDS.HalfZ then
 				lastSafe[player] = position
 			end
 		end
@@ -231,7 +253,3 @@ end)
 Players.PlayerRemoving:Connect(function(player)
 	lastSafe[player] = nil
 end)
-
--- leaderstats is created by Score.server.luau, which owns it. Two
--- scripts creating a folder of the same name can produce two folders
--- and a player list that shows neither.

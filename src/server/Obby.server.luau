@@ -324,28 +324,30 @@ local BUILDERS: { [string]: (Context) -> Vector3 } = {
 -- ===========================================================
 
 local function buildCourse(tier): Course?
-	local angleDeg = StageConfig.Gates.Angles[tier.gate]
-	if not angleDeg then
+	local gate = StageConfig.Gates[tier.gate]
+	if not gate then
 		warn(("Obby %s has no gate %d"):format(tier.name, tier.gate))
 		return nil
 	end
 
-	local angle = math.rad(angleDeg)
-	local out = Vector3.new(math.cos(angle), 0, math.sin(angle))
-	local side = Vector3.new(-math.sin(angle), 0, math.cos(angle))
+	-- the map is a rectangle now, so a gate is a point on an edge and
+	-- the direction the course runs, not an angle around a circle
+	local out = gate.out.Unit
+	local side = Vector3.new(-out.Z, 0, out.X)
 
 	local folder = Instance.new("Folder")
 	folder.Name = tier.key
 
-	-- walkway from the arena floor, through the gate, to the start
-	local bridgeLength = COURSE.StartRadius - COURSE.BridgeFrom
-	local bridgeCentre = ORIGIN + out * (COURSE.BridgeFrom + bridgeLength / 2)
+	-- walkway from the map edge, through the gate, out to the start
+	local mouth = ORIGIN + gate.position
+	local bridgeLength = COURSE.BridgeLength
+	local bridgeCentre = mouth + out * (bridgeLength / 2 - COURSE.BridgeInset)
 	makePart(folder, "Bridge",
 		Vector3.new(COURSE.BridgeWidth, 1, bridgeLength),
 		CFrame.lookAt(bridgeCentre, bridgeCentre + out),
 		ObbyConfig.Palette.Bridge, Enum.Material.SmoothPlastic)
 
-	local entryPosition = ORIGIN + out * COURSE.StartRadius
+	local entryPosition = mouth + out * (bridgeLength - COURSE.BridgeInset)
 	local entry = makePart(folder, "Entry", Vector3.new(14, 1, 14),
 		CFrame.new(entryPosition), tier.colour, Enum.Material.Neon)
 	signOn(entry, ("%s  %d COINS"):format(tier.name, tier.reward), tier.colour, 12)
@@ -539,8 +541,9 @@ task.spawn(function()
 				continue
 			end
 
-			local radius = Vector3.new(position.X - ORIGIN.X, 0, position.Z - ORIGIN.Z).Magnitude
-			if radius < RECOVERY.BeyondRadius then
+			local dx = math.abs(position.X - ORIGIN.X)
+			local dz = math.abs(position.Z - ORIGIN.Z)
+			if dx < RECOVERY.BeyondX and dz < RECOVERY.BeyondZ then
 				continue   -- inside the walls; the arena handles that
 			end
 

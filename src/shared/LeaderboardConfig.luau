@@ -11,10 +11,11 @@
 local LeaderboardConfig = {}
 
 LeaderboardConfig.Placement = {
-	Origin      = Vector3.new(0, 24, 0),
-	Radius      = 130,        -- inside the wall at 140, outside the houses at 123
-	CentreAngle = 54,         -- clear of every house and every obby gate
-	SpreadDeg   = 14,         -- angle between neighbouring boards
+	Origin = Vector3.new(0, 24, 0),
+
+	-- along the west edge road, inside the wall and off the block grid
+	LineX   = -222,
+	Spacing = 34,             -- studs between neighbouring boards
 
 	BoardSize = Vector3.new(26, 18, 1.5),
 	StandSize = Vector3.new(28, 3, 4),

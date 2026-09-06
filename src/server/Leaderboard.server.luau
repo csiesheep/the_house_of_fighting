@@ -185,17 +185,17 @@ end
 local faces: { [string]: { rows: { TextLabel }, note: TextLabel } } = {}
 
 local function buildBoard(category, index: number, total: number, parent: Instance)
-	local offset = (index - (total + 1) / 2) * PLACE.SpreadDeg
-	local angle = math.rad(PLACE.CentreAngle + offset)
+	-- a row along the west edge road, all three facing into the map
+	local offset = (index - (total + 1) / 2) * PLACE.Spacing
 	local position = PLACE.Origin + Vector3.new(
-		math.cos(angle) * PLACE.Radius,
+		PLACE.LineX,
 		PLACE.BoardSize.Y / 2 + 3,
-		math.sin(angle) * PLACE.Radius
+		offset
 	)
 
-	-- lookAt points the part's LookVector at the centre, and a part's
+	-- lookAt points the part's LookVector at the target, and a part's
 	-- Front face is that same -Z direction, so the display faces inward
-	local facing = CFrame.lookAt(position, Vector3.new(PLACE.Origin.X, position.Y, PLACE.Origin.Z))
+	local facing = CFrame.lookAt(position, position + Vector3.new(1, 0, 0))
 
 	local board = makePart(parent, category.key .. "Board", PLACE.BoardSize, facing,
 		Color3.fromRGB(28, 26, 32), Enum.Material.SmoothPlastic)

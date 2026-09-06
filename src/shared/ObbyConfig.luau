@@ -21,9 +21,9 @@ local ObbyConfig = {}
 ObbyConfig.Course = {
 	Origin = Vector3.new(0, 24, 0),   -- arena floor height
 
-	BridgeFrom  = 132,   -- inner end of the walkway, on the arena floor
-	StartRadius = 178,   -- where the first platform sits
-	BridgeWidth = 12,
+	BridgeLength = 46,   -- how far the walkway reaches past the wall
+	BridgeInset  = 6,    -- how far back inside the wall it starts
+	BridgeWidth  = 12,
 
 	LateralSwing  = 7,   -- how far the path weaves side to side
 	ClaimCooldown = 120, -- seconds before the same tier pays you again
@@ -119,8 +119,9 @@ ObbyConfig.Palette = {
 -- arena's own fall check, so the courses catch their own fallers and
 -- return them to their last checkpoint rather than the spawn ring.
 ObbyConfig.Recovery = {
-	BeyondRadius = 145,
-	DropBelow    = 12,
+	BeyondX   = 240,     -- just past the wall on each axis
+	BeyondZ   = 240,
+	DropBelow = 12,
 	CheckRate    = 0.3,
 }
 

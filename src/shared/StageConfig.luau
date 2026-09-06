@@ -1,53 +1,66 @@
 --!strict
--- The ground you fight on and the wall that keeps you here.
+-- ===========================================================
+--  StageConfig
+--
+--  The ground is a rectangle now, not a disc: a city block
+--  grid needs straight edges and right angles.
+--
+--  Numbers here and in CityConfig have to agree. The map is
+--  Cols * BlockSize + (Cols + 1) * RoadWidth on each axis, so
+--  changing the grid means changing HalfX and HalfZ to match.
+-- ===========================================================
 
 local StageConfig = {}
 
-StageConfig.Arena = {
-	Radius     = 132,                   -- decorative tiling reaches this far
-	TileSize   = 8,
-	TileHeight = 1,
-	Origin     = Vector3.new(0, 24, 0),
-
-	SpawnCount  = 8,
-	SpawnRadius = 30,                   -- in the plaza, inside the obby ring
+StageConfig.Bounds = {
+	HalfX = 232,     -- 5 blocks of 64 plus 6 roads of 24
+	HalfZ = 232,
+	Origin = Vector3.new(0, 24, 0),
 }
 
--- A solid slab under the tiles. The tiles are a jagged circle, so without
--- this there are gaps near the diagonals you could drop through.
 StageConfig.Base = {
-	Radius = 150,
-	Depth  = 8,
-	Inset  = 0.1,     -- sits this far below the tile tops, to avoid z-fighting
+	Overhang = 18,   -- how far the slab runs past the wall
+	Depth = 8,
+	Inset = 0.1,     -- below the road surface, so nothing z-fights
 }
 
 StageConfig.Boundary = {
-	Radius    = 140,
-	Height    = 90,   -- tall enough that a Gravity Coil will not clear it
+	Height = 90,     -- tall enough that a Gravity Coil will not clear it
 	Thickness = 3,
-	Segments  = 120,
-	Transparency = 0.75,   -- barely there, so the wall does not shade the arena
+	SegmentLength = 32,
+	Transparency = 0.75,
+	GateHalfWidth = 16,
 }
 
--- Openings in the boundary wall, one per obby, each sitting midway
--- between two houses so a walkway out never clips a roof.
+-- Where the obby walkways leave the map. Each is a point on the wall
+-- plus the direction the course runs. ObbyConfig tiers index into this.
 StageConfig.Gates = {
-	Angles = { 18, 90, 162, 234, 306 },
-	HalfWidthDeg = 6,
+	{ key = "North West", position = Vector3.new(-88, 0, -232), out = Vector3.new(0, 0, -1) },
+	{ key = "North East", position = Vector3.new(88, 0, -232),  out = Vector3.new(0, 0, -1) },
+	{ key = "East",       position = Vector3.new(232, 0, 0),    out = Vector3.new(1, 0, 0) },
+	{ key = "South",      position = Vector3.new(0, 0, 232),    out = Vector3.new(0, 0, 1) },
+	{ key = "West",       position = Vector3.new(-232, 0, 0),   out = Vector3.new(-1, 0, 0) },
+}
+
+-- Spawns sit on the ring road just outside the market block, so you
+-- always start on tarmac with the market in sight.
+StageConfig.Spawns = {
+	Count = 8,
+	Radius = 62,
 }
 
 StageConfig.Respawn = {
-	FallGrace = 40,    -- studs below the floor before you are pulled back
+	FallGrace = 40,
 	CheckRate = 0.3,
 }
 
 StageConfig.Palette = {
-	TileA    = Color3.fromRGB(226, 222, 213),
-	TileB    = Color3.fromRGB(210, 206, 196),
-	Base     = Color3.fromRGB(188, 185, 176),
-	Edge     = Color3.fromRGB(226, 128, 112),
-	Spawn    = Color3.fromRGB(96, 198, 255),
-	Boundary = Color3.fromRGB(198, 220, 240),
+	Road      = Color3.fromRGB(72, 72, 78),
+	RoadLine  = Color3.fromRGB(226, 214, 138),
+	Pavement  = Color3.fromRGB(178, 176, 170),
+	Base      = Color3.fromRGB(52, 54, 58),
+	Spawn     = Color3.fromRGB(96, 198, 255),
+	Boundary  = Color3.fromRGB(198, 220, 240),
 }
 
 return StageConfig
