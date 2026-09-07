@@ -213,6 +213,13 @@ type Car = {
 	t: number,
 	speed: number,
 	crashed: boolean,
+
+	-- t values where this car meets a crossing, in the order it will
+	-- reach them. Precomputed rather than measured each frame: the
+	-- grid does not move, so neither do the stop lines.
+	stops: { number },
+	nextStop: number,
+	waitingUntil: number,
 }
 
 local traffic: { Car } = {}
@@ -224,14 +231,42 @@ local function roadLine(index: number, count: number): number
 	return -half + GRID.RoadWidth / 2 + (index - 1) * (GRID.BlockSize + GRID.RoadWidth)
 end
 
+-- Every junction this lane passes through, as a t value, stopped a
+-- little short so the car halts at the crossing rather than in it.
+local function stopsAlong(along: Vector3, span: number): { number }
+	local crossAxis = math.abs(along.X) > 0.5 and "Z" or "X"
+	local count = crossAxis == "Z" and GRID.Rows or GRID.Cols
+	local direction = math.abs(along.X) > 0.5 and along.X or along.Z
+
+	local stops = {}
+	for i = 1, count + 1 do
+		local coordinate = roadLine(i, count)
+		-- position along the lane is direction * t, so t = coordinate * direction
+		local at = coordinate * direction - TRAFFIC.StopApproach
+		if at > -span and at < span then
+			table.insert(stops, at)
+		end
+	end
+
+	table.sort(stops)
+	return stops
+end
+
 local function addCar(folder: Instance, base: Vector3, along: Vector3, span: number, start: number)
 	local model = CityBuild.car(folder, base + along * start, 0, rng)
+
+	local stops = stopsAlong(along, span)
+	local nextStop = 1
+	while nextStop <= #stops and stops[nextStop] < start do
+		nextStop += 1
+	end
 
 	local car: Car = {
 		model = model, base = base, along = along, span = span,
 		t = start,
 		speed = TRAFFIC.Speed + rng:NextNumber(-TRAFFIC.SpeedJitter, TRAFFIC.SpeedJitter),
 		crashed = false,
+		stops = stops, nextStop = nextStop, waitingUntil = 0,
 	}
 
 	for _, part in ipairs(model:GetDescendants()) do
@@ -300,14 +335,31 @@ local function buildTraffic(folder: Instance)
 end
 
 RunService.Heartbeat:Connect(function(delta)
+	local now = os.clock()
+
 	for _, car in ipairs(traffic) do
 		if car.crashed or not car.model.Parent then
 			continue
 		end
 
+		if now < car.waitingUntil then
+			continue          -- sitting at a crossing
+		end
+
 		car.t += car.speed * delta
+
+		-- pull up exactly on the stop line rather than wherever this
+		-- frame happened to land, or the queue looks ragged
+		local stop = car.stops[car.nextStop]
+		if stop and car.t >= stop then
+			car.t = stop
+			car.waitingUntil = now + TRAFFIC.StopTime
+			car.nextStop += 1
+		end
+
 		if car.t > car.span then
 			car.t = -car.span         -- off one edge, back on at the other
+			car.nextStop = 1
 		end
 
 		local position = car.base + car.along * car.t
@@ -323,9 +375,10 @@ local function buildCity()
 	baseOf = {}
 	trees = {}
 
-	local counts = { S = 0, T = 0, H = 0, P = 0, C = 0 }
+	local counts = { S = 0, T = 0, A = 0, H = 0, P = 0, C = 0 }
 	local stylePool = table.clone(CityConfig.TowerStyles)
 	local skyPool = table.clone(CityConfig.SkyscraperStyles)
+	local flatPool = table.clone(CityConfig.ApartmentStyles)
 
 	for row = 1, GRID.Rows do
 		local line = CityConfig.Layout[row]
@@ -350,6 +403,12 @@ local function buildCity()
 				local built, base, total = CityBuild.tower(folder, centre, style, rng)
 				registerTower(built, base, total, centre)
 				counts.S += 1
+
+			elseif kind == "A" then
+				local style = flatPool[rng:NextInteger(1, #flatPool)]
+				local built, base, total = CityBuild.tower(folder, centre, style, rng)
+				registerTower(built, base, total, centre)
+				counts.A += 1
 
 			elseif kind == "H" then
 				local style = HouseStyles[rng:NextInteger(1, #HouseStyles)]
@@ -401,9 +460,9 @@ local function buildCity()
 
 	buildTraffic(folder)
 
-	print(("City built: %d skyscrapers, %d towers, %d houses, %d parks, %d car parks, "
-		.. "%d cars driving, %d parts")
-		:format(counts.S, counts.T, counts.H, counts.P, counts.C,
+	print(("City built: %d skyscrapers, %d towers, %d apartments, %d houses, "
+		.. "%d parks, %d car parks, %d cars driving, %d parts")
+		:format(counts.S, counts.T, counts.A, counts.H, counts.P, counts.C,
 			#traffic, #folder:GetDescendants()))
 end
 

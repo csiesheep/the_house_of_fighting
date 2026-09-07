@@ -15,6 +15,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local StageConfig = require(ReplicatedStorage:WaitForChild("StageConfig"))
 local CityConfig  = require(ReplicatedStorage:WaitForChild("CityConfig"))
+local CityBuild   = require(script.Parent.CityBuild)
 
 local BOUNDS = StageConfig.Bounds
 local BASE   = StageConfig.Base
@@ -117,6 +118,36 @@ local function buildRoadMarkings()
 	end
 end
 
+-- A zebra crossing on each of the four approaches to every junction,
+-- set back to match where the traffic actually stops.
+local function buildCrossings()
+	local approach = CityConfig.Crosswalk.Approach
+	local painted = 0
+
+	for i = 1, GRID.Cols + 1 do
+		local x = -BOUNDS.HalfX + GRID.RoadWidth / 2
+			+ (i - 1) * (GRID.BlockSize + GRID.RoadWidth)
+
+		for j = 1, GRID.Rows + 1 do
+			local z = -BOUNDS.HalfZ + GRID.RoadWidth / 2
+				+ (j - 1) * (GRID.BlockSize + GRID.RoadWidth)
+
+			local junction = ORIGIN + Vector3.new(x, -0.44, z)
+
+			for _, along in ipairs({
+				Vector3.new(0, 0, 1), Vector3.new(0, 0, -1),
+				Vector3.new(1, 0, 0), Vector3.new(-1, 0, 0),
+			}) do
+				CityBuild.crosswalk(stage, junction - along * approach,
+					along, GRID.RoadWidth)
+				painted += 1
+			end
+		end
+	end
+
+	print(("Crossings: %d painted"):format(painted))
+end
+
 -- ===========================================================
 --  Boundary
 -- ===========================================================
@@ -199,6 +230,7 @@ end
 
 buildGround()
 buildSidewalks()
+buildCrossings()
 buildRoadMarkings()
 buildBoundary()
 buildSpawns()

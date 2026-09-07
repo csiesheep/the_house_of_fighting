@@ -21,16 +21,19 @@ CityConfig.Grid = {
 	LaneMark = 1.6,   -- width of the painted centre line
 }
 
--- S skyscraper   T tower   H houses   P park   C car park   M market   . empty
+-- S skyscraper  T tower  A apartments  H houses  P park  C car park
+-- M market  . empty
 --
--- Skyscrapers sit in a ring just off the middle, so the market has a
--- skyline around it rather than towers scattered at random.
+-- Laid out like a real city rather than a skyline: two skyscrapers at
+-- the centre, offices around them, then apartments, then houses on
+-- the outside. Height falls off as you walk away from the middle,
+-- which is what makes somewhere feel like it has a downtown.
 CityConfig.Layout = {
-	"T H S C T",
-	"P S T S H",
-	"T S M S T",
-	"H S T S P",
-	"T C S H T",
+	"H H A P H",
+	"H A T T A",
+	"A T M S T",
+	"H A T S A",
+	"H C A P C",
 }
 
 -- Every block is a pavement ring around whatever stands on it: kerb
@@ -123,6 +126,45 @@ CityConfig.TowerStyles = {
 		wall = Color3.fromRGB(178, 172, 160),
 		accent = Color3.fromRGB(120, 116, 110),
 	},
+}
+
+-- Mid-rise residential: the bulk of the map. Balconies are what stop
+-- these reading as short offices.
+CityConfig.ApartmentStyles = {
+	{
+		name = "Brick Apartments",
+		widthBricks = 7, depthBricks = 5, courses = 9,
+		windows = "grid", roof = "parapet", balconies = true,
+		wall = Color3.fromRGB(164, 106, 84),
+		accent = Color3.fromRGB(214, 206, 192),
+	},
+	{
+		name = "Modern Flats",
+		widthBricks = 6, depthBricks = 6, courses = 11,
+		windows = "bands", bandEvery = 2, roof = "parapet", balconies = true,
+		wall = Color3.fromRGB(206, 202, 194),
+		accent = Color3.fromRGB(124, 140, 156),
+	},
+	{
+		name = "Walk-Up",
+		widthBricks = 5, depthBricks = 5, courses = 6,
+		windows = "grid", roof = "parapet", balconies = true,
+		wall = Color3.fromRGB(188, 168, 132),
+		accent = Color3.fromRGB(120, 92, 70),
+	},
+	{
+		name = "Corner Block",
+		widthBricks = 8, depthBricks = 4, courses = 8,
+		windows = "columns", roof = "parapet", balconies = true,
+		wall = Color3.fromRGB(146, 152, 148),
+		accent = Color3.fromRGB(196, 118, 74),
+	},
+}
+
+CityConfig.Balcony = {
+	Depth = 2.4,
+	Rail = 1.4,
+	Colour = Color3.fromRGB(196, 192, 186),
 }
 
 -- The tall ones. Same builder, coarser panels.
@@ -246,6 +288,24 @@ CityConfig.Traffic = {
 	SpeedJitter = 6,
 	Damage    = 22,     -- to anyone it runs into
 	HitCooldown = 1.5,
+
+	StopTime     = 1,   -- seconds waited at each crossing
+	-- Far enough back that the car's nose stops short of the stripes.
+	-- A 14 stud car centred here has its front at 13, and the crossing
+	-- ends at 12.
+	StopApproach = 20,
+}
+
+-- Zebra crossings on every approach to every junction. The stripes run
+-- with the traffic and spread across the road, which is the way round
+-- that reads as a crossing from a car and from the pavement both.
+CityConfig.Crosswalk = {
+	Stripes     = 3,
+	StripeWidth = 3.4,
+	BandDepth   = 6,
+	Colour      = Color3.fromRGB(236, 234, 226),
+	Rise        = 0.02,   -- barely above the tarmac, to avoid z-fighting
+	Approach    = 9,      -- centre of the band, back from the junction
 }
 
 CityConfig.Rules = {

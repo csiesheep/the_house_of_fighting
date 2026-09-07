@@ -194,6 +194,30 @@ function CityBuild.tower(parent: Instance, centre: Vector3, style, rng: Random)
 			local part = makePart(folder, "Brick", size, CFrame.new(at),
 				colour, material, BRICK.Health, transparency)
 
+			-- a ledge and a rail outside each window, which is what
+			-- keeps a block of flats from reading as a short office
+			if window and style.balconies and course > 2 then
+				local BALCONY = CityConfig.Balcony
+				local outward = (at - centre)
+				outward = Vector3.new(outward.X, 0, outward.Z)
+				if outward.Magnitude > 0.1 then
+					outward = outward.Unit
+					local ledgeAt = at + outward * (BALCONY.Depth / 2 + 1)
+					makePart(folder, "Balcony",
+						Vector3.new(size.X * 0.9, 0.4, size.Z + BALCONY.Depth),
+						CFrame.lookAt(ledgeAt - Vector3.new(0, size.Y / 2, 0),
+							ledgeAt - Vector3.new(0, size.Y / 2, 0) + outward),
+						BALCONY.Colour, Enum.Material.Concrete, BRICK.Health)
+					makePart(folder, "Rail",
+						Vector3.new(size.X * 0.9, BALCONY.Rail, 0.3),
+						CFrame.lookAt(ledgeAt + outward * (BALCONY.Depth / 2)
+							- Vector3.new(0, size.Y / 2 - BALCONY.Rail / 2, 0),
+							ledgeAt + outward * (BALCONY.Depth / 2)
+							- Vector3.new(0, size.Y / 2 - BALCONY.Rail / 2, 0) + outward),
+						BALCONY.Colour, Enum.Material.Metal, BRICK.Health)
+				end
+			end
+
 			if course <= RULES.BaseCourses then
 				base[part] = true
 				baseTotal += 1
@@ -368,6 +392,24 @@ function CityBuild.tree(parent: Instance, base: Vector3, rng: Random): Model
 	model.PrimaryPart = trunk
 	model.Parent = parent
 	return model
+end
+
+-- A zebra crossing laid across one approach to a junction. `along` is
+-- the direction traffic travels, so the stripes run with it.
+function CityBuild.crosswalk(parent: Instance, centre: Vector3, along: Vector3,
+	roadWidth: number)
+	local spec = CityConfig.Crosswalk
+	local across = Vector3.new(-along.Z, 0, along.X)
+	local pitch = roadWidth / (spec.Stripes + 1)
+
+	for i = 1, spec.Stripes do
+		local offset = (i - (spec.Stripes + 1) / 2) * pitch
+		local at = centre + across * offset + Vector3.new(0, spec.Rise, 0)
+		makePart(parent, "Crossing",
+			Vector3.new(spec.StripeWidth, 1, spec.BandDepth),
+			CFrame.lookAt(at, at + along),
+			spec.Colour, Enum.Material.SmoothPlastic)
+	end
 end
 
 -- A smaller tree for the pavements, in a soil bed. Same Choppable tag
