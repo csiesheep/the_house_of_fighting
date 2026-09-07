@@ -185,6 +185,42 @@ local function scatter(count: number, centre: Vector3, spread: number, place: (V
 	end
 end
 
+-- The widest a building may be before it stands on its own pavement.
+local function padSize(): number
+	local WALK = CityConfig.Sidewalk
+	return GRID.BlockSize - (WALK.Width + WALK.KerbWidth) * 2
+end
+
+-- Styles are written by hand and the grid gets retuned; rather than
+-- keep the two in sync by memory, drop anything that no longer fits
+-- and say so once. Silently building over the sidewalk would look
+-- like a placement bug rather than a sizing one.
+local function fitting(styles, label: string, brickWidth: number)
+	local limit = padSize()
+	local kept, dropped = {}, {}
+
+	for _, style in ipairs(styles) do
+		local scale = style.brickScale or 1
+		local widest = math.max(style.widthBricks, style.depthBricks) * brickWidth * scale
+		if widest <= limit then
+			table.insert(kept, style)
+		else
+			table.insert(dropped, ("%s (%d)"):format(style.name, widest))
+		end
+	end
+
+	if #dropped > 0 then
+		warn(("%s: %d style(s) too wide for a %d stud pad, skipped -- %s")
+			:format(label, #dropped, limit, table.concat(dropped, ", ")))
+	end
+	if #kept == 0 then
+		warn(("%s: nothing fits a %d stud pad; falling back to the full list")
+			:format(label, limit))
+		return styles
+	end
+	return kept
+end
+
 local function registerTower(folder: Folder, base: { [BasePart]: boolean },
 	baseTotal: number, centre: Vector3)
 	local record: Tower = {
@@ -376,9 +412,11 @@ local function buildCity()
 	trees = {}
 
 	local counts = { S = 0, T = 0, A = 0, H = 0, P = 0, C = 0 }
-	local stylePool = table.clone(CityConfig.TowerStyles)
-	local skyPool = table.clone(CityConfig.SkyscraperStyles)
-	local flatPool = table.clone(CityConfig.ApartmentStyles)
+	local brick = CityConfig.Brick.Size.X
+	local stylePool = fitting(CityConfig.TowerStyles, "Towers", brick)
+	local skyPool = fitting(CityConfig.SkyscraperStyles, "Skyscrapers", brick)
+	local flatPool = fitting(CityConfig.ApartmentStyles, "Apartments", brick)
+	local housePool = fitting(HouseStyles, "Houses", HouseConfig.House.BrickSize.X)
 
 	for row = 1, GRID.Rows do
 		local line = CityConfig.Layout[row]
@@ -411,7 +449,7 @@ local function buildCity()
 				counts.A += 1
 
 			elseif kind == "H" then
-				local style = HouseStyles[rng:NextInteger(1, #HouseStyles)]
+				local style = housePool[rng:NextInteger(1, #housePool)]
 				local house = HouseBuilder.build(style,
 					CFrame.lookAt(centre, Vector3.new(ORIGIN.X, centre.Y, ORIGIN.Z)))
 				house.Parent = folder

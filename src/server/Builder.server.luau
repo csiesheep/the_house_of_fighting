@@ -39,10 +39,13 @@ local placedBy: { [Player]: number } = {}
 --  Placing
 -- ===========================================================
 
-local function cellIsFree(position: Vector3): boolean
+-- The placing player's own character is excluded, which is what lets
+-- you put a brick in the cell you are standing in and be lifted onto
+-- it. Everyone else still blocks, so you cannot build inside someone.
+local function cellIsFree(position: Vector3, character: Model?): boolean
 	local params = OverlapParams.new()
 	params.FilterType = Enum.RaycastFilterType.Exclude
-	params.FilterDescendantsInstances = {}
+	params.FilterDescendantsInstances = character and { character } or {}
 
 	-- slightly under size, so bricks can sit flush against each other
 	-- without reporting themselves as blocked
@@ -77,10 +80,10 @@ local function place(player: Player, requested: Vector3)
 	if not Building.withinArena(position) then
 		return
 	end
-	if (placedBy[player] or 0) >= Building.MaxPerPlayer then
+	if Building.MaxPerPlayer and (placedBy[player] or 0) >= Building.MaxPerPlayer then
 		return
 	end
-	if not cellIsFree(position) then
+	if not cellIsFree(position, character) then
 		return
 	end
 
@@ -191,6 +194,6 @@ Players.PlayerRemoving:Connect(function(player)
 	placedBy[player] = nil
 end)
 
-print(("Building ready: %d x %d x %d bricks, %d per player")
+print(("Building ready: %d x %d x %d bricks, %s per player")
 	:format(Building.BrickSize.X, Building.BrickSize.Y, Building.BrickSize.Z,
-		Building.MaxPerPlayer))
+		Building.MaxPerPlayer and tostring(Building.MaxPerPlayer) or "unlimited"))

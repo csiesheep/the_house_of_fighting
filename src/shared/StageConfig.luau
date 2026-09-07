@@ -13,8 +13,8 @@
 local StageConfig = {}
 
 StageConfig.Bounds = {
-	HalfX = 232,     -- 5 blocks of 64 plus 6 roads of 24
-	HalfZ = 232,
+	HalfX = 248,     -- 7 blocks of 48 plus 8 roads of 20
+	HalfZ = 248,
 	Origin = Vector3.new(0, 24, 0),
 }
 
@@ -34,19 +34,21 @@ StageConfig.Boundary = {
 
 -- Where the obby walkways leave the map. Each is a point on the wall
 -- plus the direction the course runs. ObbyConfig tiers index into this.
+-- Each sits on a road line, so a walkway out is the street continuing
+-- rather than a bridge off the back of a block.
 StageConfig.Gates = {
-	{ key = "North West", position = Vector3.new(-88, 0, -232), out = Vector3.new(0, 0, -1) },
-	{ key = "North East", position = Vector3.new(88, 0, -232),  out = Vector3.new(0, 0, -1) },
-	{ key = "East",       position = Vector3.new(232, 0, 0),    out = Vector3.new(1, 0, 0) },
-	{ key = "South",      position = Vector3.new(0, 0, 232),    out = Vector3.new(0, 0, 1) },
-	{ key = "West",       position = Vector3.new(-232, 0, 0),   out = Vector3.new(-1, 0, 0) },
+	{ key = "North West", position = Vector3.new(-102, 0, -248), out = Vector3.new(0, 0, -1) },
+	{ key = "North East", position = Vector3.new(102, 0, -248),  out = Vector3.new(0, 0, -1) },
+	{ key = "East",       position = Vector3.new(248, 0, 34),    out = Vector3.new(1, 0, 0) },
+	{ key = "South",      position = Vector3.new(-34, 0, 248),   out = Vector3.new(0, 0, 1) },
+	{ key = "West",       position = Vector3.new(-248, 0, -34),  out = Vector3.new(-1, 0, 0) },
 }
 
--- Spawns sit on the ring road just outside the market block, so you
--- always start on tarmac with the market in sight.
+-- On the market block's own pavement. Any further out and you would
+-- spawn in the road, which now has traffic on it.
 StageConfig.Spawns = {
 	Count = 8,
-	Radius = 62,
+	Radius = 20,
 }
 
 StageConfig.Respawn = {

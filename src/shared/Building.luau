@@ -19,7 +19,9 @@ local Building = {}
 Building.BrickSize = Vector3.new(4, 2, 4)
 Building.Health    = 2       -- same as house brick: your wall is no tougher
 Building.Reach     = 40      -- studs you can place from
-Building.MaxPerPlayer = 20   -- bricks standing at once, per player
+
+-- nil for no cap at all; a number caps bricks standing at once
+Building.MaxPerPlayer = nil
 
 -- Grid is anchored to the arena floor, so a placed brick sits flush
 -- with the ground and stacks in the same 2 stud courses the houses use.
@@ -33,6 +35,13 @@ Building.EdgeMargin = 4
 
 Building.Tag = "Breakable"
 Building.FolderName = "PlayerBuilds"
+
+-- The cell your feet are in, so a brick placed there lifts you onto
+-- it. Offset from the root rather than measured off the floor: the
+-- point is to build where there is nothing to measure against.
+function Building.underfoot(rootPosition: Vector3): Vector3
+	return Building.snap(rootPosition - Vector3.new(0, 2.4, 0))
+end
 
 -- Snap a world position to the nearest legal brick centre.
 function Building.snap(position: Vector3): Vector3

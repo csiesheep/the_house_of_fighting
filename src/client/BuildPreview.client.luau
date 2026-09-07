@@ -7,8 +7,11 @@
 --
 --  The ghost uses the same Building rules the server validates
 --  against, so what you see is what you are allowed. It turns
---  red when the server would refuse -- out of reach, outside
---  the walls, or a cell already occupied.
+--  red when the server would refuse.
+--
+--  Q, or the button, drops a brick in the cell you are
+--  standing in, which lifts you onto it. That is how you get
+--  height without anything to aim at.
 -- ===========================================================
 
 local Players           = game:GetService("Players")
@@ -97,6 +100,37 @@ end
 
 RunService.RenderStepped:Connect(update)
 
+-- -----------------------------------------------------------
+--  Building underfoot
+-- -----------------------------------------------------------
+
+local function placeUnderfoot()
+	local character = player.Character
+	local root = character and character:FindFirstChild("HumanoidRootPart")
+	if not (equipped and root and root:IsA("BasePart")) then
+		return
+	end
+	placeBrick:FireServer(Building.underfoot(root.Position))
+end
+
+local riseButton = Instance.new("TextButton")
+riseButton.Name = "BuildUnder"
+riseButton.Size = UDim2.new(0, 128, 0, 40)
+riseButton.Position = UDim2.new(1, -146, 1, -226)
+riseButton.BackgroundColor3 = Color3.fromRGB(96, 140, 214)
+riseButton.TextColor3 = Color3.fromRGB(250, 252, 255)
+riseButton.Font = Enum.Font.GothamBold
+riseButton.TextSize = 14
+riseButton.Text = "BUILD UNDER  Q"
+riseButton.Visible = false
+riseButton.Parent = gui
+
+local riseCorner = Instance.new("UICorner")
+riseCorner.CornerRadius = UDim.new(0, 10)
+riseCorner.Parent = riseButton
+
+riseButton.MouseButton1Click:Connect(placeUnderfoot)
+
 -- ===========================================================
 --  Equipping and clicking
 -- ===========================================================
@@ -105,6 +139,7 @@ local function watch(character: Model)
 	local function refresh()
 		local tool = character:FindFirstChild("Trowel")
 		equipped = tool ~= nil
+		riseButton.Visible = equipped
 	end
 	character.ChildAdded:Connect(refresh)
 	character.ChildRemoved:Connect(refresh)
@@ -116,10 +151,17 @@ if player.Character then
 end
 player.CharacterAdded:Connect(watch)
 
+
 UserInputService.InputBegan:Connect(function(input, processed)
 	if processed or not equipped then
 		return
 	end
+
+	if input.KeyCode == Enum.KeyCode.Q then
+		placeUnderfoot()
+		return
+	end
+
 	if input.UserInputType ~= Enum.UserInputType.MouseButton1
 		and input.UserInputType ~= Enum.UserInputType.Touch then
 		return

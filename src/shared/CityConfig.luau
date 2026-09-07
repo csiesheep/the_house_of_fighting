@@ -14,10 +14,10 @@
 local CityConfig = {}
 
 CityConfig.Grid = {
-	Cols = 5,
-	Rows = 5,
-	BlockSize = 64,
-	RoadWidth = 24,
+	Cols = 7,
+	Rows = 7,
+	BlockSize = 48,
+	RoadWidth = 20,
 	LaneMark = 1.6,   -- width of the painted centre line
 }
 
@@ -29,17 +29,19 @@ CityConfig.Grid = {
 -- the outside. Height falls off as you walk away from the middle,
 -- which is what makes somewhere feel like it has a downtown.
 CityConfig.Layout = {
-	"H H A P H",
-	"H A T T A",
-	"A T M S T",
-	"H A T S A",
-	"H C A P C",
+	"H H A C A H H",
+	"H A T A T A H",
+	"A T H S H T A",
+	"P A S M S A P",
+	"A T H S H T A",
+	"H A T A T A H",
+	"H H A C A H H",
 }
 
 -- Every block is a pavement ring around whatever stands on it: kerb
 -- at the road edge, walkable sidewalk, then the building's own pad.
 CityConfig.Sidewalk = {
-	Width      = 8,     -- of the walkable ring
+	Width      = 6,     -- of the walkable ring
 	KerbWidth  = 2,
 	KerbRise   = 0.9,   -- above the road surface
 	WalkRise   = 0.6,
@@ -133,14 +135,14 @@ CityConfig.TowerStyles = {
 CityConfig.ApartmentStyles = {
 	{
 		name = "Brick Apartments",
-		widthBricks = 7, depthBricks = 5, courses = 9,
+		widthBricks = 7, depthBricks = 5, courses = 7,
 		windows = "grid", roof = "parapet", balconies = true,
 		wall = Color3.fromRGB(164, 106, 84),
 		accent = Color3.fromRGB(214, 206, 192),
 	},
 	{
 		name = "Modern Flats",
-		widthBricks = 6, depthBricks = 6, courses = 11,
+		widthBricks = 6, depthBricks = 6, courses = 8,
 		windows = "bands", bandEvery = 2, roof = "parapet", balconies = true,
 		wall = Color3.fromRGB(206, 202, 194),
 		accent = Color3.fromRGB(124, 140, 156),
@@ -154,7 +156,7 @@ CityConfig.ApartmentStyles = {
 	},
 	{
 		name = "Corner Block",
-		widthBricks = 8, depthBricks = 4, courses = 8,
+		widthBricks = 8, depthBricks = 4, courses = 6,
 		windows = "columns", roof = "parapet", balconies = true,
 		wall = Color3.fromRGB(146, 152, 148),
 		accent = Color3.fromRGB(196, 118, 74),
@@ -171,21 +173,21 @@ CityConfig.Balcony = {
 CityConfig.SkyscraperStyles = {
 	{
 		name = "Glass Skyscraper",
-		widthBricks = 6, depthBricks = 6, courses = 20, brickScale = 2,
+		widthBricks = 4, depthBricks = 4, courses = 24, brickScale = 2,
 		windows = "bands", bandEvery = 2, roof = "antenna",
 		wall = Color3.fromRGB(74, 96, 118),
 		accent = Color3.fromRGB(128, 158, 184),
 	},
 	{
 		name = "Steel Spire",
-		widthBricks = 5, depthBricks = 5, courses = 24, brickScale = 2,
+		widthBricks = 3, depthBricks = 3, courses = 30, brickScale = 2,
 		windows = "columns", roof = "stepped",
 		wall = Color3.fromRGB(108, 112, 124),
 		accent = Color3.fromRGB(186, 192, 202),
 	},
 	{
 		name = "Corporate Slab",
-		widthBricks = 6, depthBricks = 5, courses = 18, brickScale = 2,
+		widthBricks = 4, depthBricks = 3, courses = 20, brickScale = 2,
 		windows = "grid", roof = "parapet",
 		wall = Color3.fromRGB(160, 152, 140),
 		accent = Color3.fromRGB(96, 92, 88),
@@ -197,12 +199,14 @@ CityConfig.SkyscraperStyles = {
 -- ===========================================================
 
 CityConfig.Street = {
-	LampsPerBlock    = 2,
-	TreesPerBlock    = 3,     -- planted along the sidewalk itself
-	PlantersPerBlock = 2,
+	-- Halved from the old five by five grid: there are now forty-nine
+	-- blocks rather than twenty-five, so per-block counts land twice.
+	LampsPerBlock    = 1,
+	TreesPerBlock    = 2,     -- planted along the sidewalk itself
+	PlantersPerBlock = 1,
 	BenchesPerBlock  = 1,
-	BinsPerBlock     = 1,
-	Inset            = 4,     -- from the block edge onto the pavement
+	BinsPerBlock     = 0,
+	Inset            = 3,     -- from the block edge onto the pavement
 	Health           = 1,     -- one hammer blow; they are dressing, not walls
 
 	Lamp = {
@@ -283,7 +287,7 @@ CityConfig.Car = {
 -- than the whole rest of the map and drive worse for it.
 CityConfig.Traffic = {
 	PerLane   = 1,
-	LaneOffset = 6,     -- from the centre line of the road
+	LaneOffset = 5,     -- from the centre line of the narrower road
 	Speed     = 26,     -- studs per second
 	SpeedJitter = 6,
 	Damage    = 22,     -- to anyone it runs into
@@ -300,7 +304,7 @@ CityConfig.Traffic = {
 -- with the traffic and spread across the road, which is the way round
 -- that reads as a crossing from a car and from the pavement both.
 CityConfig.Crosswalk = {
-	Stripes     = 3,
+	Stripes     = 2,
 	StripeWidth = 3.4,
 	BandDepth   = 6,
 	Colour      = Color3.fromRGB(236, 234, 226),
