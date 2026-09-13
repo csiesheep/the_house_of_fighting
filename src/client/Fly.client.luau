@@ -2,8 +2,9 @@
 -- ===========================================================
 --  THE HOUSE OF FIGHTING -- fly
 --
---  Ctrl+F on Windows, Cmd+F on a Mac, or the FLY button. Only
---  offered to players the server has marked CanFly.
+--  Ctrl+F on Windows, Cmd+F on a Mac, the FLY button, or typing
+--  /fly in chat. Only offered to players the server has marked
+--  CanFly.
 --
 --  While flying you move the way the camera points: W flies
 --  where you are looking, so looking up and pressing W climbs.
@@ -19,6 +20,7 @@ local Players           = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService        = game:GetService("RunService")
 local UserInputService  = game:GetService("UserInputService")
+local TextChatService   = game:GetService("TextChatService")
 
 local Staff = require(ReplicatedStorage:WaitForChild("Staff"))
 local Theme = require(ReplicatedStorage:WaitForChild("Theme"))
@@ -44,7 +46,7 @@ badge.BackgroundTransparency = 0.1
 badge.TextColor3 = Color3.fromRGB(190, 176, 255)
 badge.Font = Enum.Font.GothamBold
 badge.TextSize = 13
-badge.Text = "FLYING   Space up  Ctrl down  Ctrl+F to stop"
+badge.Text = "FLYING   Space up  Ctrl down  /fly to stop"
 badge.Visible = false
 badge.Parent = gui
 
@@ -249,6 +251,54 @@ end)
 
 player:GetAttributeChangedSignal("CanFly"):Connect(showState)
 showState()
+
+-- -----------------------------------------------------------
+--  /fly in chat
+--
+--  Registered both ways, because a place can be on either chat
+--  system: a TextChatCommand for the current TextChatService,
+--  and Player.Chatted for legacy chat. The command form also
+--  keeps "/fly" out of everyone else's chat window.
+--
+--  If a message ever reaches both, a short debounce stops the
+--  second one switching flying straight back off.
+-- -----------------------------------------------------------
+
+local lastChatToggle = 0
+
+local function chatToggle()
+	local now = os.clock()
+	if now - lastChatToggle < 0.4 then
+		return
+	end
+	lastChatToggle = now
+	toggle()
+end
+
+task.spawn(function()
+	if TextChatService.ChatVersion ~= Enum.ChatVersion.TextChatService then
+		return
+	end
+	local commands = TextChatService:WaitForChild("TextChatCommands", 10)
+	if not commands then
+		return
+	end
+
+	local command = Instance.new("TextChatCommand")
+	command.Name = "FlyCommand"
+	command.PrimaryAlias = "/fly"
+	command.Triggered:Connect(function()
+		chatToggle()
+	end)
+	command.Parent = commands
+end)
+
+player.Chatted:Connect(function(message)
+	local text = string.lower((string.gsub(message, "^%s+", ""):gsub("%s+$", "")))
+	if text == "/fly" then
+		chatToggle()
+	end
+end)
 
 -- -----------------------------------------------------------
 --  Flying
