@@ -169,6 +169,13 @@ local function connect(player: Player, spec, tool: Tool)
 		if landed >= spec.maxHits then
 			break
 		end
+		-- swinging from the driver's seat should hit the street, not
+		-- the nearest thing, which is your own car
+		local owner = brick:FindFirstAncestorOfClass("Model")
+		if owner and owner:GetAttribute("DriverId") == player.UserId then
+			continue
+		end
+
 		if brick:IsA("BasePart") then
 			Breaking.damage(brick, damage, centre :: Vector3, spec.knockback, player)
 			landed += 1

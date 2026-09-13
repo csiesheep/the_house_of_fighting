@@ -315,7 +315,7 @@ local function addCar(folder: Instance, base: Vector3, along: Vector3, span: num
 	local body = model.PrimaryPart
 	if body then
 		body.Touched:Connect(function(hit)
-			if car.crashed then
+			if car.crashed or model:GetAttribute("Taken") then
 				return
 			end
 			local character = hit:FindFirstAncestorOfClass("Model")
@@ -374,7 +374,8 @@ RunService.Heartbeat:Connect(function(delta)
 	local now = os.clock()
 
 	for _, car in ipairs(traffic) do
-		if car.crashed or not car.model.Parent then
+		-- a car somebody climbed into belongs to them now, not the lanes
+		if car.crashed or not car.model.Parent or car.model:GetAttribute("Taken") then
 			continue
 		end
 

@@ -312,6 +312,27 @@ CityConfig.Crosswalk = {
 	Approach    = 9,      -- centre of the band, back from the junction
 }
 
+-- Getting in and driving. Speeds are studs per second; the HUD shows
+-- mph at a rough 0.6 scale so the number feels like a car.
+CityConfig.Driving = {
+	MaxSpeed     = 60,
+	ReverseSpeed = 22,
+	Accel        = 34,     -- studs/s gained per second
+	Brake        = 80,     -- studs/s shed per second, when slowing
+	TurnRate     = 2.2,    -- radians/s at full lock
+	TurnFullAt   = 12,     -- speed at which steering reaches full lock
+
+	Force  = 1e6,
+	Torque = 1e7,
+
+	PromptHold     = 0.25,
+	PromptDistance = 12,
+
+	RunOverSpeed    = 25,  -- below this a car nudges rather than hurts
+	RunOverDamage   = 35,
+	RunOverCooldown = 1,
+}
+
 CityConfig.Rules = {
 	RebuildDelay   = 10,    -- seconds after the city is flattened
 	SwitchCooldown = 300,   -- five minutes before the rebuild button appears

@@ -473,6 +473,8 @@ function CityBuild.car(parent: Instance, base: Vector3, facing: number, rng: Ran
 	end
 
 	model.PrimaryPart = body
+	-- any car can be climbed into; Vehicles.server.luau adds the prompt
+	CollectionService:AddTag(model, "Drivable")
 	model.Parent = parent
 	return model
 end

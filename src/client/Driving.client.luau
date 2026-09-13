@@ -1,0 +1,120 @@
+--!strict
+-- ===========================================================
+--  THE HOUSE OF FIGHTING -- driving
+--
+--  Runs only while you are in a car's DriveSeat. The server
+--  gave you network ownership of the car, so the values set
+--  here are the ones the physics actually simulates, and
+--  everyone else sees the result replicated.
+--
+--  Input comes from the VehicleSeat itself, which already maps
+--  WASD, arrow keys, gamepads and the phone thumbstick into
+--  ThrottleFloat and SteerFloat. Nothing here reads a key.
+-- ===========================================================
+
+local Players           = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local RunService        = game:GetService("RunService")
+
+local CityConfig = require(ReplicatedStorage:WaitForChild("CityConfig"))
+local Theme      = require(ReplicatedStorage:WaitForChild("Theme"))
+
+local DRIVE = CityConfig.Driving
+local player = Players.LocalPlayer
+
+-- -----------------------------------------------------------
+--  Hint
+-- -----------------------------------------------------------
+
+local gui = Instance.new("ScreenGui")
+gui.Name = "DrivingUi"
+gui.ResetOnSpawn = false
+gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+gui.Parent = player:WaitForChild("PlayerGui")
+
+local hint = Instance.new("TextLabel")
+hint.Size = UDim2.new(0, 340, 0, 34)
+hint.Position = UDim2.new(0.5, -170, 1, -96)
+hint.BackgroundColor3 = Theme.Panel
+hint.BackgroundTransparency = 0.15
+hint.TextColor3 = Theme.Ink
+hint.Font = Enum.Font.GothamBold
+hint.TextSize = 14
+hint.Visible = false
+hint.Parent = gui
+
+local corner = Instance.new("UICorner")
+corner.CornerRadius = UDim.new(0, 10)
+corner.Parent = hint
+
+-- -----------------------------------------------------------
+--  The loop
+-- -----------------------------------------------------------
+
+local speed = 0
+local currentSeat: VehicleSeat? = nil
+
+local function approach(value: number, target: number, step: number): number
+	if value < target then
+		return math.min(value + step, target)
+	end
+	return math.max(value - step, target)
+end
+
+RunService.Heartbeat:Connect(function(delta)
+	local character = player.Character
+	local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+	local seat = humanoid and humanoid.SeatPart
+
+	if not (seat and seat:IsA("VehicleSeat") and seat.Name == "DriveSeat") then
+		currentSeat = nil
+		speed = 0
+		hint.Visible = false
+		return
+	end
+
+	local model = seat.Parent
+	local body = model and model:IsA("Model") and model.PrimaryPart
+	local linear = body and body:FindFirstChild("DriveVelocity")
+	local angular = body and body:FindFirstChild("DriveTurn")
+	if not (body and linear and linear:IsA("LinearVelocity")
+		and angular and angular:IsA("AngularVelocity")) then
+		return
+	end
+
+	local forward = Vector3.new(body.CFrame.LookVector.X, 0, body.CFrame.LookVector.Z)
+	if forward.Magnitude < 0.01 then
+		return
+	end
+	forward = forward.Unit
+
+	-- climbing into a car that is already rolling picks up where it is
+	-- rather than slamming to zero
+	if seat ~= currentSeat then
+		currentSeat = seat
+		speed = forward:Dot(body.AssemblyLinearVelocity)
+	end
+
+	local throttle = seat.ThrottleFloat
+	local steer = seat.SteerFloat
+
+	local target = throttle >= 0 and throttle * DRIVE.MaxSpeed or throttle * DRIVE.ReverseSpeed
+
+	-- speeding up is slower than stopping, which is what makes letting
+	-- go of W feel like braking rather than coasting forever
+	local speedingUp = math.abs(target) > math.abs(speed) and (target * speed >= 0)
+	local rate = speedingUp and DRIVE.Accel or DRIVE.Brake
+	speed = approach(speed, target, rate * delta)
+
+	linear.VectorVelocity = forward * speed
+
+	-- no steering from standstill, and reversing steers the way a
+	-- real car does rather than mirrored
+	local grip = math.clamp(math.abs(speed) / DRIVE.TurnFullAt, 0, 1)
+	local direction = speed >= 0 and 1 or -1
+	angular.AngularVelocity = Vector3.new(0, -steer * DRIVE.TurnRate * grip * direction, 0)
+
+	hint.Visible = true
+	hint.Text = ("%d mph   W/S drive  A/D steer  Space to get out")
+		:format(math.floor(math.abs(speed) * 0.6))
+end)
