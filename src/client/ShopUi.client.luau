@@ -13,6 +13,7 @@ local MarketplaceService = game:GetService("MarketplaceService")
 local ReplicatedStorage  = game:GetService("ReplicatedStorage")
 
 local ShopConfig = require(ReplicatedStorage:WaitForChild("ShopConfig"))
+local freeProduct = ReplicatedStorage:WaitForChild("FreeProduct")
 
 local player = Players.LocalPlayer
 
@@ -168,6 +169,26 @@ local function addRow(item, infoType: EnumItem, isOwned: (() -> boolean)?, promp
 	buy.Parent = row
 	round(buy, 8)
 
+	-- Staff: passes are already theirs, products are one click and free.
+	-- Decided here rather than left to refresh(), because a pass with no
+	-- id yet would otherwise be greyed out as not on sale.
+	if player:GetAttribute("Staff") == true then
+		if isOwned then
+			buy.Text = "OWNED"
+			buy.BackgroundColor3 = OWNED
+			buy.TextColor3 = Theme.ReadyInk
+			buy.AutoButtonColor = false
+		else
+			buy.Text = "FREE"
+			buy.BackgroundColor3 = OWNED
+			buy.TextColor3 = Theme.ReadyInk
+			buy.MouseButton1Click:Connect(function()
+				freeProduct:FireServer(item.key)
+			end)
+		end
+		return
+	end
+
 	-- No id yet: show the intended price so the shop reads as finished
 	-- during development, but make it obviously not buyable.
 	if not (item.id and item.id > 0) then
@@ -220,6 +241,15 @@ end
 -- -----------------------------------------------------------
 
 local refreshers: { () -> () } = {}
+
+-- Wait briefly for the server to say whether this player is staff, so
+-- the rows are built right first time instead of rebuilt later.
+do
+	local started = os.clock()
+	while player:GetAttribute("Staff") == nil and os.clock() - started < 5 do
+		task.wait(0.1)
+	end
+end
 
 for _, pass in ipairs(ShopConfig.GamePasses) do
 	-- every pass has a Pass_<key> attribute, so no per-item mapping here

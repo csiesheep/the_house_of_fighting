@@ -17,6 +17,17 @@ Staff.Flyers = {
 	{ name = "EnderAshy", userId = 4173612045 },
 }
 
+-- Staff get flying and everything in both shops for free. Matched on
+-- user id only, for the same reason flying is.
+function Staff.isStaff(player: Player): boolean
+	for _, entry in ipairs(Staff.Flyers) do
+		if entry.userId and entry.userId == player.UserId then
+			return true
+		end
+	end
+	return false
+end
+
 Staff.Fly = {
 	Speed      = 80,    -- studs per second
 	Force      = 1e6,

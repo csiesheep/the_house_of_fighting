@@ -47,6 +47,9 @@ local function grant(player: Player)
 	local allowed = allowedIds[player.UserId] == true
 		or allowedNames[string.lower(player.Name)] == true
 	player:SetAttribute("CanFly", allowed)
+	-- the shop reads this to show FREE; the grants themselves happen in
+	-- Shop.server and Market.server, which check the id again
+	player:SetAttribute("Staff", Staff.isStaff(player))
 	if allowed then
 		print(("Staff: %s can fly (Ctrl+F / Cmd+F)"):format(player.Name))
 	end

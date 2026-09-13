@@ -13,6 +13,7 @@ local Players           = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local MarketConfig = require(ReplicatedStorage:WaitForChild("MarketConfig"))
+local Staff        = require(ReplicatedStorage:WaitForChild("Staff"))
 
 local STALL = MarketConfig.Stall
 
@@ -180,9 +181,13 @@ end)
 -- ===========================================================
 
 Players.PlayerAdded:Connect(function(player)
-	-- known-false to start; Score restores what was actually owned
+	-- staff own the whole market; everyone else starts known-false and
+	-- Score restores what they actually bought
+	local free = Staff.isStaff(player)
 	for _, item in ipairs(MarketConfig.Items) do
-		if player:GetAttribute("Owns_" .. item.key) == nil then
+		if free then
+			player:SetAttribute("Owns_" .. item.key, true)
+		elseif player:GetAttribute("Owns_" .. item.key) == nil then
 			player:SetAttribute("Owns_" .. item.key, false)
 		end
 	end

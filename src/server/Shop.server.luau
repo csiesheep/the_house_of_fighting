@@ -15,6 +15,7 @@ local RunService         = game:GetService("RunService")
 
 local ShopConfig = require(ReplicatedStorage:WaitForChild("ShopConfig"))
 local Breaking   = require(ReplicatedStorage:WaitForChild("Breaking"))
+local Staff      = require(ReplicatedStorage:WaitForChild("Staff"))
 
 -- ===========================================================
 --  Game passes -> attributes
@@ -34,8 +35,10 @@ end
 -- attribute they care about, so adding a pass to ShopConfig needs no
 -- change here -- only in whatever script grants the perk.
 local function refreshPasses(player: Player)
+	-- staff own every pass without buying it
+	local free = Staff.isStaff(player)
 	for _, pass in ipairs(ShopConfig.GamePasses) do
-		player:SetAttribute("Pass_" .. pass.key, ownsPass(player, pass.id))
+		player:SetAttribute("Pass_" .. pass.key, free or ownsPass(player, pass.id))
 	end
 
 	-- two derived conveniences, so consumers do not repeat the mapping
@@ -113,24 +116,58 @@ do
 	end
 end
 
-local productHandlers: { [number]: (Player) -> boolean } = {}
-
-for _, product in ipairs(ShopConfig.Products) do
-	if product.id and product.id > 0 and product.key == "DemolitionCharge" then
-		productHandlers[product.id] = function(player)
-			local character = player.Character
-			local root = character and character:FindFirstChild("HumanoidRootPart")
-			if not (root and root:IsA("BasePart")) then
-				return false
-			end
-
-			local charge = ShopConfig.DemolitionCharge
-			local destroyed = Breaking.explode(root.Position, charge.Radius, charge.Knockback, player)
-			print(("%s set off a charge: %d bricks"):format(player.Name, destroyed))
-			return true
+-- What each product does, keyed by name rather than id, so staff can
+-- use one before it has been created on the dashboard at all.
+local effectByKey: { [string]: (Player) -> boolean } = {
+	DemolitionCharge = function(player)
+		local character = player.Character
+		local root = character and character:FindFirstChild("HumanoidRootPart")
+		if not (root and root:IsA("BasePart")) then
+			return false
 		end
+
+		local charge = ShopConfig.DemolitionCharge
+		local destroyed = Breaking.explode(root.Position, charge.Radius, charge.Knockback, player)
+		print(("%s set off a charge: %d bricks"):format(player.Name, destroyed))
+		return true
+	end,
+}
+
+local productHandlers: { [number]: (Player) -> boolean } = {}
+for _, product in ipairs(ShopConfig.Products) do
+	if product.id and product.id > 0 and effectByKey[product.key] then
+		productHandlers[product.id] = effectByKey[product.key]
 	end
 end
+
+-- Staff use products without paying. The client only shows the FREE
+-- button; the id check here is what actually allows it.
+local freeProduct = Instance.new("RemoteEvent")
+freeProduct.Name = "FreeProduct"
+freeProduct.Parent = ReplicatedStorage
+
+local lastFree: { [Player]: number } = {}
+
+freeProduct.OnServerEvent:Connect(function(player, key)
+	if type(key) ~= "string" or not Staff.isStaff(player) then
+		return
+	end
+	local effect = effectByKey[key]
+	if not effect then
+		return
+	end
+	-- free is not the same as unlimited-per-frame
+	local now = os.clock()
+	if lastFree[player] and now - lastFree[player] < 2 then
+		return
+	end
+	lastFree[player] = now
+	pcall(effect, player)
+end)
+
+Players.PlayerRemoving:Connect(function(player)
+	lastFree[player] = nil
+end)
 
 MarketplaceService.ProcessReceipt = function(receiptInfo)
 	local player = Players:GetPlayerByUserId(receiptInfo.PlayerId)
