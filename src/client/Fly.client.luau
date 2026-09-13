@@ -2,8 +2,8 @@
 -- ===========================================================
 --  THE HOUSE OF FIGHTING -- fly
 --
---  Ctrl+F on Windows, Cmd+F on a Mac. Only offered to players
---  the server has marked CanFly.
+--  Ctrl+F on Windows, Cmd+F on a Mac, or the FLY button. Only
+--  offered to players the server has marked CanFly.
 --
 --  While flying you move the way the camera points: W flies
 --  where you are looking, so looking up and pressing W climbs.
@@ -53,6 +53,57 @@ corner.CornerRadius = UDim.new(0, 8)
 corner.Parent = badge
 
 -- -----------------------------------------------------------
+--  Buttons
+--
+--  FLY sits above the other right-hand buttons and only exists
+--  for players allowed to fly. UP and DOWN appear while flying,
+--  because a phone has no Space or Ctrl and its thumbstick only
+--  moves you sideways.
+-- -----------------------------------------------------------
+
+local function makeButton(name: string, text: string, position: UDim2, size: UDim2): TextButton
+	local button = Instance.new("TextButton")
+	button.Name = name
+	button.Size = size
+	button.Position = position
+	button.BackgroundColor3 = Color3.fromRGB(88, 72, 168)
+	button.TextColor3 = Color3.fromRGB(246, 244, 255)
+	button.Font = Enum.Font.GothamBold
+	button.TextSize = 14
+	button.Text = text
+	button.Visible = false
+	button.Parent = gui
+
+	local round = Instance.new("UICorner")
+	round.CornerRadius = UDim.new(0, 10)
+	round.Parent = button
+	return button
+end
+
+local flyButton = makeButton("FlyButton", "FLY",
+	UDim2.new(1, -146, 1, -280), UDim2.new(0, 128, 0, 40))
+local upButton = makeButton("FlyUp", "UP",
+	UDim2.new(1, -212, 1, -280), UDim2.new(0, 58, 0, 40))
+local downButton = makeButton("FlyDown", "DOWN",
+	UDim2.new(1, -212, 1, -234), UDim2.new(0, 58, 0, 40))
+
+local upHeld, downHeld = false, false
+
+for _, pair in ipairs({ { upButton, true }, { downButton, false } }) do
+	local button, isUp = pair[1], pair[2]
+	button.MouseButton1Down:Connect(function()
+		if isUp then upHeld = true else downHeld = true end
+	end)
+	button.MouseButton1Up:Connect(function()
+		if isUp then upHeld = false else downHeld = false end
+	end)
+	-- a finger sliding off the button never sends the Up event
+	button.MouseLeave:Connect(function()
+		if isUp then upHeld = false else downHeld = false end
+	end)
+end
+
+-- -----------------------------------------------------------
 --  State
 -- -----------------------------------------------------------
 
@@ -72,9 +123,23 @@ local function parts(): (Model?, Humanoid?, BasePart?)
 	return character, humanoid, root :: BasePart?
 end
 
+local function showState()
+	local allowed = player:GetAttribute("CanFly") == true
+	flyButton.Visible = allowed
+	flyButton.Text = flying and "STOP FLYING" or "FLY"
+	flyButton.BackgroundColor3 = flying and Color3.fromRGB(196, 84, 110)
+		or Color3.fromRGB(88, 72, 168)
+	upButton.Visible = allowed and flying
+	downButton.Visible = allowed and flying
+	if not flying then
+		upHeld, downHeld = false, false
+	end
+end
+
 local function stop()
 	flying = false
 	badge.Visible = false
+	showState()
 
 	if velocity then velocity:Destroy() end
 	if facing then facing:Destroy() end
@@ -107,6 +172,7 @@ local function start()
 
 	flying = true
 	badge.Visible = true
+	showState()
 
 	-- PlatformStand stops the humanoid trying to walk and animate
 	-- against the forces below
@@ -156,6 +222,17 @@ local function modifierHeld(): boolean
 		or UserInputService:IsKeyDown(Enum.KeyCode.RightMeta)
 end
 
+local function toggle()
+	if player:GetAttribute("CanFly") ~= true then
+		return
+	end
+	if flying then
+		stop()
+	else
+		start()
+	end
+end
+
 UserInputService.InputBegan:Connect(function(input)
 	if input.KeyCode ~= Enum.KeyCode.F or not modifierHeld() then
 		return
@@ -163,16 +240,15 @@ UserInputService.InputBegan:Connect(function(input)
 	if UserInputService:GetFocusedTextBox() then
 		return   -- typing in chat
 	end
-	if player:GetAttribute("CanFly") ~= true then
-		return
-	end
-
-	if flying then
-		stop()
-	else
-		start()
-	end
+	toggle()
 end)
+
+flyButton.MouseButton1Click:Connect(function()
+	toggle()
+end)
+
+player:GetAttributeChangedSignal("CanFly"):Connect(showState)
+showState()
 
 -- -----------------------------------------------------------
 --  Flying
@@ -221,6 +297,8 @@ RunService.RenderStepped:Connect(function()
 	if UserInputService:IsKeyDown(Enum.KeyCode.A) then move -= right end
 	if UserInputService:IsKeyDown(Enum.KeyCode.Space) then move += Vector3.yAxis end
 	if UserInputService:IsKeyDown(Enum.KeyCode.LeftControl) then move -= Vector3.yAxis end
+	if upHeld then move += Vector3.yAxis end
+	if downHeld then move -= Vector3.yAxis end
 
 	-- phones: the thumbstick still drives the humanoid's MoveDirection
 	if move.Magnitude < 0.01 and humanoid.MoveDirection.Magnitude > 0.01 then
@@ -242,4 +320,5 @@ player.CharacterAdded:Connect(function()
 	badge.Visible = false
 	velocity, facing, attachment = nil, nil, nil
 	table.clear(savedCollide)
+	showState()
 end)
