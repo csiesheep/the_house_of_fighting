@@ -48,6 +48,39 @@ local corner = Instance.new("UICorner")
 corner.CornerRadius = UDim.new(0, 10)
 corner.Parent = hint
 
+-- Shown when you try a car without the licence. The purchase prompt
+-- comes from the server; this says why it appeared, or that the pass
+-- is not on sale yet if it has not been created.
+local notice = Instance.new("TextLabel")
+notice.Size = UDim2.new(0, 360, 0, 40)
+notice.Position = UDim2.new(0.5, -180, 0.62, 0)
+notice.BackgroundColor3 = Theme.Accent
+notice.TextColor3 = Theme.AccentInk
+notice.Font = Enum.Font.GothamBold
+notice.TextSize = 15
+notice.Visible = false
+notice.Parent = gui
+
+local noticeCorner = Instance.new("UICorner")
+noticeCorner.CornerRadius = UDim.new(0, 10)
+noticeCorner.Parent = notice
+
+local noticeToken = 0
+local remotes = ReplicatedStorage:WaitForChild("VehicleRemotes")
+local needLicence = remotes:WaitForChild("NeedLicence")
+
+needLicence.OnClientEvent:Connect(function(price: number)
+	noticeToken += 1
+	local mine = noticeToken
+	notice.Text = ("You need a Driver's Licence  (R$ %d)  -- see the SHOP"):format(price)
+	notice.Visible = true
+	task.delay(3, function()
+		if noticeToken == mine then
+			notice.Visible = false
+		end
+	end)
+end)
+
 -- -----------------------------------------------------------
 --  E gets you out
 --

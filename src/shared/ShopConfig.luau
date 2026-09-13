@@ -40,6 +40,11 @@ ShopConfig.GamePasses = {
 		desc = "Triple damage, longer reach, and debris that really travels.",
 	},
 	{
+		key = "DriversLicence", id = 0, robux = 99,
+		name = "Driver's Licence",
+		desc = "Get in and drive any car in the city. Parked or in traffic.",
+	},
+	{
 		key = "AdminCommands", id = 0, robux = 1999,
 		name = "Admin Commands",
 		desc = "Chat commands: /nuke, /rebuild, /speed, /jump, /heal, /reset.",

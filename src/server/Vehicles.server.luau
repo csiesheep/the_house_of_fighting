@@ -17,11 +17,35 @@
 --  attribute. Neither script knows how the other works.
 -- ===========================================================
 
-local Players           = game:GetService("Players")
-local CollectionService = game:GetService("CollectionService")
-local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Players            = game:GetService("Players")
+local CollectionService  = game:GetService("CollectionService")
+local ReplicatedStorage  = game:GetService("ReplicatedStorage")
+local MarketplaceService = game:GetService("MarketplaceService")
 
 local CityConfig = require(ReplicatedStorage:WaitForChild("CityConfig"))
+local ShopConfig = require(ReplicatedStorage:WaitForChild("ShopConfig"))
+
+-- Driving is a 99 Robux Game Pass. Ownership arrives as the
+-- Pass_DriversLicence attribute from Shop.server.luau, so this script
+-- never asks MarketplaceService who owns what -- only to show the
+-- purchase prompt to someone who does not.
+local LICENCE_KEY = "DriversLicence"
+
+local licencePass = nil
+for _, pass in ipairs(ShopConfig.GamePasses) do
+	if pass.key == LICENCE_KEY then
+		licencePass = pass
+	end
+end
+
+local remotes = Instance.new("Folder")
+remotes.Name = "VehicleRemotes"
+
+local needLicence = Instance.new("RemoteEvent")
+needLicence.Name = "NeedLicence"
+needLicence.Parent = remotes
+
+remotes.Parent = ReplicatedStorage
 
 local DRIVE = CityConfig.Driving
 local CAR   = CityConfig.Car
@@ -206,6 +230,17 @@ local function enter(player: Player, model: Model)
 		return   -- somebody is already in it
 	end
 
+	-- No licence, no driving: offer the pass instead. Checked before the
+	-- car is rigged, so a refused attempt leaves traffic undisturbed.
+	if player:GetAttribute("Pass_" .. LICENCE_KEY) ~= true then
+		local price = licencePass and licencePass.robux or 99
+		needLicence:FireClient(player, price)
+		if licencePass and licencePass.id and licencePass.id > 0 then
+			MarketplaceService:PromptGamePassPurchase(player, licencePass.id)
+		end
+		return
+	end
+
 	local character = player.Character
 	local humanoid = character and character:FindFirstChildOfClass("Humanoid")
 	if not (humanoid and humanoid.Health > 0) or humanoid.SeatPart then
@@ -266,4 +301,4 @@ Players.PlayerRemoving:Connect(function(player)
 	end
 end)
 
-print("Vehicles ready: press E at any car to drive it, E again to get out")
+print("Vehicles ready: press E at any car to drive it (needs the Driver's Licence pass)")
