@@ -14,9 +14,7 @@ local Staff = {}
 
 Staff.Flyers = {
 	{ name = "Jeb_the5th", userId = 8637994222 },
-	-- No Roblox account was found with this exact username when it was
-	-- added. If it is a display name, replace it with the real username.
-	{ name = "enderashey" },
+	{ name = "EnderAshy", userId = 4173612045 },
 }
 
 Staff.Fly = {
