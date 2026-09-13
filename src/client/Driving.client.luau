@@ -15,6 +15,7 @@
 local Players           = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService        = game:GetService("RunService")
+local UserInputService  = game:GetService("UserInputService")
 
 local CityConfig = require(ReplicatedStorage:WaitForChild("CityConfig"))
 local Theme      = require(ReplicatedStorage:WaitForChild("Theme"))
@@ -46,6 +47,34 @@ hint.Parent = gui
 local corner = Instance.new("UICorner")
 corner.CornerRadius = UDim.new(0, 10)
 corner.Parent = hint
+
+-- -----------------------------------------------------------
+--  E gets you out
+--
+--  The same key that got you in. Space still works too, since
+--  that is Roblox's own way out of any seat.
+--
+--  Deliberately not gated on the "processed" flag: when another
+--  car is parked beside you its Drive prompt claims E, and you
+--  would be stuck in the seat until you drove away from it.
+--  A focused chat box is the one case that should swallow it.
+-- -----------------------------------------------------------
+
+UserInputService.InputBegan:Connect(function(input)
+	if input.KeyCode ~= Enum.KeyCode.E then
+		return
+	end
+	if UserInputService:GetFocusedTextBox() then
+		return
+	end
+
+	local character = player.Character
+	local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+	local seat = humanoid and humanoid.SeatPart
+	if seat and seat:IsA("VehicleSeat") and seat.Name == "DriveSeat" then
+		humanoid.Jump = true
+	end
+end)
 
 -- -----------------------------------------------------------
 --  The loop
@@ -115,6 +144,6 @@ RunService.Heartbeat:Connect(function(delta)
 	angular.AngularVelocity = Vector3.new(0, -steer * DRIVE.TurnRate * grip * direction, 0)
 
 	hint.Visible = true
-	hint.Text = ("%d mph   W/S drive  A/D steer  Space to get out")
+	hint.Text = ("%d mph   W/S drive  A/D steer  E to get out")
 		:format(math.floor(math.abs(speed) * 0.6))
 end)

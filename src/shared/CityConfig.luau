@@ -325,7 +325,7 @@ CityConfig.Driving = {
 	Force  = 1e6,
 	Torque = 1e7,
 
-	PromptHold     = 0.25,
+	PromptHold     = 0,      -- a tap of E, not a hold
 	PromptDistance = 12,
 
 	RunOverSpeed    = 25,  -- below this a car nudges rather than hurts

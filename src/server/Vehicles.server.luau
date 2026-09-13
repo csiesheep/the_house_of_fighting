@@ -2,7 +2,7 @@
 -- ===========================================================
 --  THE HOUSE OF FIGHTING -- getting in cars
 --
---  Every car the city builds is tagged Drivable. Walk up, hold
+--  Every car the city builds is tagged Drivable. Walk up, press
 --  E, and it stops being scenery: its parts are welded into one
 --  physics assembly, a seat goes in, and you are put in it.
 --
@@ -266,4 +266,4 @@ Players.PlayerRemoving:Connect(function(player)
 	end
 end)
 
-print("Vehicles ready: hold E at any car to drive it")
+print("Vehicles ready: press E at any car to drive it, E again to get out")
